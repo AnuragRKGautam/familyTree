@@ -10,6 +10,18 @@ import { PersonProfile } from './PersonProfile'
 import { PersonSearch } from './PersonSearch'
 import { StatusMessage } from './StatusMessage'
 
+const SIDEBAR_STORAGE_KEY = 'familytree.sidebarOpen'
+
+function readSidebarOpen(): boolean {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_STORAGE_KEY)
+    if (raw === null) return true
+    return raw !== '0'
+  } catch {
+    return true
+  }
+}
+
 export function TreePage() {
   const { personId } = useParams<{ personId?: string }>()
   const navigate = useNavigate()
@@ -18,6 +30,20 @@ export function TreePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [denied, setDenied] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(readSidebarOpen)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarOpen ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+    // Give the chart layout a beat to widen, then nudge family-chart to reflow.
+    const id = window.setTimeout(() => {
+      window.dispatchEvent(new Event('resize'))
+    }, 50)
+    return () => window.clearTimeout(id)
+  }, [sidebarOpen])
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -79,15 +105,44 @@ export function TreePage() {
         </p>
       ) : null}
 
-      <div className="workspace">
-        <aside className="sidebar">
-          <PersonSearch onSelect={selectPerson} />
-          {personId ? (
-            <PersonProfile personId={personId} onFocus={selectPerson} />
-          ) : (
-            <p className="muted">Select a person to open their profile.</p>
-          )}
-        </aside>
+      <div className={`workspace${sidebarOpen ? '' : ' workspace--sidebar-collapsed'}`}>
+        {sidebarOpen ? (
+          <aside className="sidebar">
+            <div className="sidebar-toolbar">
+              <span className="sidebar-toolbar-label">Profile</span>
+              <button
+                type="button"
+                className="sidebar-toggle"
+                onClick={() => setSidebarOpen(false)}
+                aria-expanded={true}
+                aria-controls="tree-sidebar"
+                title="Minimize panel"
+              >
+                Minimize panel
+              </button>
+            </div>
+            <div id="tree-sidebar" className="sidebar-body">
+              <PersonSearch onSelect={selectPerson} />
+              {personId ? (
+                <PersonProfile personId={personId} onFocus={selectPerson} />
+              ) : (
+                <p className="muted">Select a person to open their profile.</p>
+              )}
+            </div>
+          </aside>
+        ) : (
+          <div className="sidebar-rail" aria-hidden={false}>
+            <button
+              type="button"
+              className="sidebar-toggle sidebar-toggle--expand"
+              onClick={() => setSidebarOpen(true)}
+              aria-expanded={false}
+              title="Show panel"
+            >
+              Show panel
+            </button>
+          </div>
+        )}
 
         <section className="chart-pane">
           {loading ? <StatusMessage title="Loading family tree…" /> : null}
