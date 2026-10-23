@@ -18,6 +18,10 @@ export interface AuthContextValue {
   errorMessage: string | null
   canEdit: boolean
   isAdmin: boolean
+  /** null = unrestricted (admin). Set = only these person ids (+ new orphans via RLS). */
+  accessScopeIds: Set<string> | null
+  accessRootIds: string[]
+  canEditPerson: (personId: string) => boolean
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>

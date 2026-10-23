@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes, useParams } from 'react
 import { AuthProvider } from './app/AuthProvider'
 import { useAuth } from './app/useAuth'
 import { SignInPage } from './components/SignInPage'
+import { SignUpPage } from './components/SignUpPage'
 import { StatusMessage } from './components/StatusMessage'
 import { TreePage } from './components/TreePage'
 import { PersonForm } from './components/PersonForm'
@@ -62,6 +63,7 @@ export default function App() {
         <Routes>
           <Route path="/prototype" element={<PrototypePage />} />
           <Route path="/docs-limitations" element={<LimitationsPage />} />
+          <Route path="/signup" element={<SignUpPage />} />
           <Route path="/" element={<Navigate to="/tree" replace />} />
 
           <Route element={<AuthedLayout />}>

@@ -360,6 +360,32 @@ button.button-link:hover {
   background: rgba(15, 118, 110, 0.08);
 }
 
+.banner-warn {
+  margin: 0;
+  padding: 0.75rem 1.25rem;
+  background: #fef3c7;
+  border-bottom: 1px solid #f59e0b;
+  color: #78350f;
+}
+
+.access-page .access-section {
+  margin-top: 1.75rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.profiles-table .root-cell {
+  min-width: 14rem;
+}
+
+.access-page .access-section h2 {
+  margin: 0;
+}
+
+.invite-form {
+  max-width: 28rem;
+}
+
 .profiles-table {
   width: 100%;
   border-collapse: collapse;

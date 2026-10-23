@@ -34,7 +34,8 @@ export function PersonForm() {
   const returnTo = searchParams.get('returnTo')
   const isNewRoute = !routePersonId || routePersonId === 'new'
   const navigate = useNavigate()
-  const { canEdit } = useAuth()
+  const { canEdit, canEditPerson, accessScopeIds, isAdmin, accessRootIds, refreshProfile } =
+    useAuth()
 
   const [savedId, setSavedId] = useState<string | null>(isNewRoute ? null : (routePersonId ?? null))
   const personId = isNewRoute ? null : savedId
@@ -137,17 +138,44 @@ export function PersonForm() {
     }
   }, [personId])
 
-  const otherPeople = useMemo(
-    () => people.filter((p) => p.id !== personId),
-    [people, personId],
+  const linkedIds = useMemo(
+    () => new Set([...parentIds, ...partnerIds, ...childIds, ...siblingIds]),
+    [parentIds, partnerIds, childIds, siblingIds],
   )
+
+  const otherPeople = useMemo(() => {
+    const base = people.filter((p) => p.id !== personId)
+    if (isAdmin || accessScopeIds === null) return base
+    // Editors: only people in their family branch (plus anyone already linked).
+    return base.filter((p) => accessScopeIds.has(p.id) || linkedIds.has(p.id))
+  }, [people, personId, isAdmin, accessScopeIds, linkedIds])
 
   if (!canEdit) {
     return (
       <StatusMessage
         variant="error"
         title="Permission denied"
-        detail="Your role cannot add or edit records. Set your profile role to editor or admin in Supabase."
+        detail="Your role cannot add or edit records."
+      />
+    )
+  }
+
+  if (isEdit && personId && !canEditPerson(personId)) {
+    return (
+      <StatusMessage
+        variant="error"
+        title="Outside your family access"
+        detail="You can only edit people at your assigned family root and below (spouse, children, siblings, descendants). Ask an admin to change your access root if this is wrong."
+      />
+    )
+  }
+
+  if (!isAdmin && canEdit && accessScopeIds !== null && accessScopeIds.size === 0) {
+    return (
+      <StatusMessage
+        variant="error"
+        title="No family access root"
+        detail="An admin must assign you a family access person before you can add or edit."
       />
     )
   }
@@ -182,6 +210,8 @@ export function PersonForm() {
         )
       })
       setNotice('Details saved. Use Relationships below to link family.')
+      // Refresh scope so newly created orphans are editable in the UI.
+      await refreshProfile()
 
       if (isNewRoute && returnTo && returnTo.startsWith('/')) {
         navigate(returnTo, { replace: true })
@@ -277,12 +307,18 @@ export function PersonForm() {
       </div>
 
       <h1>{isEdit ? 'Edit person' : 'Add person'}</h1>
+      {!isAdmin && accessRootIds.length > 0 ? (
+        <p className="muted small">
+          Your edit access is limited to your family branch (root and below). You cannot change
+          ancestors above your access root.
+        </p>
+      ) : null}
       <p className="lede">
         {isEdit
           ? 'Update details, search existing people to link, or add a new person first.'
           : returnTo
             ? 'Create this person, then you will return to the previous edit page to link them.'
-            : 'Save the person first, then link parents, partners, children, and siblings.'}
+            : 'Save the person first, then link parents, partners, children, and siblings under your family branch.'}
       </p>
 
       <form className="stack-form" onSubmit={onSubmit}>

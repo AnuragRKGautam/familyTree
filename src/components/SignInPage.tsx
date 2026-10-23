@@ -40,8 +40,12 @@ export function SignInPage() {
         <h1>Family Tree</h1>
         <p className="lede">Sign in with your approved account.</p>
         <p className="lede">
-          Or open the <Link to="/prototype">local chart prototype</Link> (fictional
-          data, no sign-in).
+          New relative? <Link to="/signup">Create an account</Link> (an admin must invite or
+          approve you).
+        </p>
+        <p className="lede">
+          Or open the <Link to="/prototype">local chart prototype</Link> (fictional data, no
+          sign-in).
         </p>
         <form onSubmit={onSubmit} className="stack-form">
           <label>

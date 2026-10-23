@@ -106,9 +106,23 @@ SPA fallback is configured via `not_found_handling = "single-page-application"` 
 |------|----------------|
 | `viewer` | Read tree, search, profiles |
 | `editor` | Add/edit people, relationships, photos |
-| `admin` | Everything editors can do + approve users / change roles |
+| `admin` | Everything editors can do + invite/approve users / change roles |
 
 Permissions are enforced with Postgres RLS, not only the UI.
+
+### Inviting users (admin)
+
+1. Apply these SQL migrations in order (once each) in the Supabase SQL editor:
+   - [`supabase/migrations/20260322200000_user_invites.sql`](supabase/migrations/20260322200000_user_invites.sql)
+   - [`supabase/migrations/20260322210000_family_scoped_access.sql`](supabase/migrations/20260322210000_family_scoped_access.sql)
+2. Sign in as admin → **Users & access**.
+3. **Add invite** with email + role. For **editors**, also set a **family access root** person.
+4. Relative opens **`/signup`**, registers with that email, then signs in.
+5. Or they self-register; you approve them and set their access root under **Users & access**.
+
+**Family-scoped editing:** an editor granted root person X may edit X and people at that level or below (spouses, siblings, children, deeper descendants). They cannot change ancestors above X. Admins are unrestricted. Enforced in Postgres RLS, not only the UI.
+
+In Supabase Auth settings, enable email sign-ups. For easiest testing you may disable “Confirm email” on the free tier.
 
 ## Security notes
 

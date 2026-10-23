@@ -13,7 +13,7 @@ import { StatusMessage } from './StatusMessage'
 export function TreePage() {
   const { personId } = useParams<{ personId?: string }>()
   const navigate = useNavigate()
-  const { canEdit, isAdmin, profile, signOut } = useAuth()
+  const { canEdit, isAdmin, profile, signOut, accessRootIds, accessScopeIds } = useAuth()
   const [chartData, setChartData] = useState<Data>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -61,14 +61,23 @@ export function TreePage() {
           </span>
         </div>
         <nav className="topbar-nav">
-          {canEdit ? <Link to="/people/new">Add person</Link> : null}
-          {isAdmin ? <Link to="/admin/profiles">Access</Link> : null}
+          {canEdit && (isAdmin || (accessScopeIds && accessScopeIds.size > 0)) ? (
+            <Link to="/people/new">Add person</Link>
+          ) : null}
+          {isAdmin ? <Link to="/admin/profiles">Users & access</Link> : null}
           <Link to="/prototype">Prototype</Link>
           <button type="button" className="linkish" onClick={() => void signOut()}>
             Sign out
           </button>
         </nav>
       </header>
+
+      {!isAdmin && canEdit && accessRootIds.length === 0 ? (
+        <p className="banner-warn">
+          You are an editor without a family access root. Ask an admin to assign a person under{' '}
+          <strong>Users & access</strong> so you can edit that branch.
+        </p>
+      ) : null}
 
       <div className="workspace">
         <aside className="sidebar">

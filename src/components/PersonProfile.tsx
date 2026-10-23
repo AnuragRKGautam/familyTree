@@ -45,7 +45,7 @@ function RelativeList({
 }
 
 export function PersonProfile({ personId, onFocus }: PersonProfileProps) {
-  const { canEdit } = useAuth()
+  const { canEdit, canEditPerson } = useAuth()
   const [person, setPerson] = useState<PersonWithRelations | null>(null)
   const [relatives, setRelatives] = useState<Map<string, Person>>(new Map())
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
@@ -125,10 +125,12 @@ export function PersonProfile({ personId, onFocus }: PersonProfileProps) {
         </div>
       </header>
 
-      {canEdit ? (
+      {canEdit && canEditPerson(person.id) ? (
         <p>
           <Link to={`/people/${person.id}/edit`}>Edit record (link parents, partner, children, siblings)</Link>
         </p>
+      ) : canEdit ? (
+        <p className="muted">View only — this person is above your family access root.</p>
       ) : null}
 
       {person.biography ? <p className="biography">{person.biography}</p> : (
