@@ -1,0 +1,5 @@
+# Minimal Supabase config for Edge Functions.
+# Link the project with: npx supabase link --project-ref YOUR_REF
+
+[functions.send-invite]
+verify_jwt = true

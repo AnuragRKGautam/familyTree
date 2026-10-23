@@ -413,6 +413,17 @@ button.button-link:hover {
   color: #78350f;
 }
 
+.invite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 0.9rem;
+  align-items: center;
+}
+
+.invite-actions a.linkish {
+  color: var(--accent);
+}
+
 .access-page .access-section {
   margin-top: 1.75rem;
   display: grid;

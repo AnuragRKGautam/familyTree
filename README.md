@@ -112,17 +112,26 @@ Permissions are enforced with Postgres RLS, not only the UI.
 
 ### Inviting users (admin)
 
+Saving an invite only writes a DB row unless you also deploy the email Edge Function. The browser never holds the service-role key.
+
 1. Apply these SQL migrations in order (once each) in the Supabase SQL editor:
    - [`supabase/migrations/20260322200000_user_invites.sql`](supabase/migrations/20260322200000_user_invites.sql)
    - [`supabase/migrations/20260322210000_family_scoped_access.sql`](supabase/migrations/20260322210000_family_scoped_access.sql)
-2. Sign in as admin → **Users & access**.
-3. **Add invite** with email + role. For **editors**, also set a **family access root** person.
-4. Relative opens **`/signup`**, registers with that email, then signs in.
-5. Or they self-register; you approve them and set their access root under **Users & access**.
+2. Deploy the invite email function (one-time):
+
+```bash
+npx supabase login
+npx supabase link --project-ref YOUR_PROJECT_REF
+npx supabase functions deploy send-invite
+```
+
+3. In Supabase **Authentication → URL configuration**, set **Site URL** to your app origin (e.g. `https://your-site.pages.dev`) and add the same origin under **Redirect URLs**.
+4. Sign in as admin → **Users & access** → **Add invite** (editors need a family access root). The app calls `send-invite`, which uses Auth `inviteUserByEmail`.
+5. If the function is not deployed, use **Email manually** / share `/signup` — they must register with the invited email.
+
+Built-in Supabase email is limited on the free tier and often lands in spam. For reliable delivery, configure custom SMTP under **Project Settings → Auth**.
 
 **Family-scoped editing:** an editor granted root person X may edit X and people at that level or below (spouses, siblings, children, deeper descendants). They cannot change ancestors above X. Admins are unrestricted. Enforced in Postgres RLS, not only the UI.
-
-In Supabase Auth settings, enable email sign-ups. For easiest testing you may disable “Confirm email” on the free tier.
 
 ## Security notes
 

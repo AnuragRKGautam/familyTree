@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { listProfiles, updateProfileAccess } from '../data/profiles'
-import { createInvite, deleteInvite, listInvites, type Invite } from '../data/invites'
+import {
+  createInvite,
+  deleteInvite,
+  inviteMailtoHref,
+  listInvites,
+  sendInviteEmail,
+  type Invite,
+} from '../data/invites'
 import { listAccessGrants, setAccessRoot, type AccessGrant } from '../data/access'
 import { listPeople } from '../data/people'
 import { DataAccessError } from '../data/errors'
@@ -82,8 +89,9 @@ export function AdminProfiles() {
     setInviting(true)
     setError(null)
     setNotice(null)
+    const emailForNotice = inviteEmail.trim().toLowerCase()
     try {
-      await createInvite(
+      const { email: emailResult } = await createInvite(
         inviteEmail,
         inviteRole,
         inviteRole === 'admin' ? null : inviteRootId || null,
@@ -92,13 +100,32 @@ export function AdminProfiles() {
       setInviteRole('viewer')
       setInviteRootId('')
       await reload()
-      setNotice(
-        `Invite saved for ${inviteEmail.trim().toLowerCase()}. They register at /signup with that email.`,
-      )
+      if (emailResult.sent) {
+        setNotice(
+          `Invite saved and email sent to ${emailForNotice}. They should use the link in that email (check spam).`,
+        )
+      } else {
+        setNotice(
+          `Invite saved for ${emailForNotice}, but the automatic email was not sent` +
+            (emailResult.error ? ` (${emailResult.error})` : '') +
+            `. Use “Email manually” on the pending invite, or share ${signupUrl}.`,
+        )
+      }
     } catch (err) {
       setError(err instanceof DataAccessError ? err.message : 'Could not create invite')
     } finally {
       setInviting(false)
+    }
+  }
+
+  async function resendInviteEmail(email: string) {
+    setError(null)
+    setNotice(null)
+    const result = await sendInviteEmail(email)
+    if (result.sent) {
+      setNotice(`Invite email sent again to ${email}.`)
+    } else {
+      setError(result.error ?? 'Could not send invite email')
     }
   }
 
@@ -146,7 +173,9 @@ export function AdminProfiles() {
       <section className="access-section">
         <h2>Add user (invite)</h2>
         <p className="muted small">
-          Sign-up link: <a href={signupUrl}>{signupUrl}</a>
+          Saving an invite tries to email them via Supabase Auth (requires the{' '}
+          <code>send-invite</code> Edge Function). Fallback sign-up link:{' '}
+          <a href={signupUrl}>{signupUrl}</a>
         </p>
         <form className="stack-form invite-form" onSubmit={onInvite}>
           <label>
@@ -211,7 +240,17 @@ export function AdminProfiles() {
                   <td>{invite.role}</td>
                   <td>{personName(invite.root_person_id)}</td>
                   <td>{new Date(invite.created_at).toLocaleString()}</td>
-                  <td>
+                  <td className="invite-actions">
+                    <button
+                      type="button"
+                      className="linkish"
+                      onClick={() => void resendInviteEmail(invite.email)}
+                    >
+                      Resend email
+                    </button>
+                    <a className="linkish" href={inviteMailtoHref(invite.email, signupUrl)}>
+                      Email manually
+                    </a>
                     <button
                       type="button"
                       className="linkish"
