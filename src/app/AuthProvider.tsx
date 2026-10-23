@@ -113,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await resolveProfile(session)
   }, [resolveProfile, session])
 
+  const isLoggedIn = Boolean(session?.user)
   const isAdmin = profile?.approved === true && profile.role === 'admin'
   const canEdit =
     profile?.approved === true && (profile.role === 'editor' || profile.role === 'admin')
@@ -133,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: session?.user ?? null,
       profile,
       errorMessage,
+      isLoggedIn,
       canEdit,
       isAdmin,
       accessScopeIds,
@@ -147,6 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       profile,
       errorMessage,
+      isLoggedIn,
       canEdit,
       isAdmin,
       accessScopeIds,

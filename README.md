@@ -36,7 +36,7 @@ npm install
 npm run dev
 ```
 
-Signed-in app: `/` and `/tree` (auth required). Local chart prototype (no auth): `/prototype`.
+Public tree: `/` and `/tree` (no login). Birth/death dates and editing require sign-in (`/signin`). Local chart prototype: `/prototype`.
 
 ### Quality checks
 
@@ -117,6 +117,7 @@ Saving an invite only writes a DB row unless you also deploy the email Edge Func
 1. Apply these SQL migrations in order (once each) in the Supabase SQL editor:
    - [`supabase/migrations/20260322200000_user_invites.sql`](supabase/migrations/20260322200000_user_invites.sql)
    - [`supabase/migrations/20260322210000_family_scoped_access.sql`](supabase/migrations/20260322210000_family_scoped_access.sql)
+   - [`supabase/migrations/20260323120000_public_read.sql`](supabase/migrations/20260323120000_public_read.sql) (public tree; dates only for logged-in users)
 2. Deploy the invite email function (one-time):
 
 ```bash

@@ -25,7 +25,8 @@ function readSidebarOpen(): boolean {
 export function TreePage() {
   const { personId } = useParams<{ personId?: string }>()
   const navigate = useNavigate()
-  const { canEdit, isAdmin, profile, signOut, accessRootIds, accessScopeIds } = useAuth()
+  const { canEdit, isAdmin, profile, signOut, accessRootIds, accessScopeIds, isLoggedIn, status } =
+    useAuth()
   const [chartData, setChartData] = useState<Data>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -65,7 +66,7 @@ export function TreePage() {
 
   useEffect(() => {
     void refresh()
-  }, [refresh])
+  }, [refresh, isLoggedIn])
 
   const mainId = useMemo(() => {
     if (personId && chartData.some((d) => d.id === personId)) return personId
@@ -81,22 +82,40 @@ export function TreePage() {
       <header className="topbar">
         <div>
           <strong>Family Tree</strong>
-          <span className="muted">
-            {' '}
-            · {profile?.email} ({profile?.role})
-          </span>
+          {isLoggedIn && profile ? (
+            <span className="muted">
+              {' '}
+              · {profile.email} ({profile.role}
+              {!profile.approved ? ', pending approval' : ''})
+            </span>
+          ) : (
+            <span className="muted"> · Public view</span>
+          )}
         </div>
         <nav className="topbar-nav">
           {canEdit && (isAdmin || (accessScopeIds && accessScopeIds.size > 0)) ? (
             <Link to="/people/new">Add person</Link>
           ) : null}
           {isAdmin ? <Link to="/admin/profiles">Users & access</Link> : null}
-          <Link to="/prototype">Prototype</Link>
-          <button type="button" className="linkish" onClick={() => void signOut()}>
-            Sign out
-          </button>
+          {isLoggedIn ? (
+            <button type="button" className="linkish" onClick={() => void signOut()}>
+              Sign out
+            </button>
+          ) : (
+            <>
+              <Link to="/signin">Sign in</Link>
+              <Link to="/signup">Sign up</Link>
+            </>
+          )}
         </nav>
       </header>
+
+      {status === 'unapproved' ? (
+        <p className="banner-warn">
+          You are signed in but not approved yet. You can browse the tree and see dates; editing
+          unlocks after an admin approves your account.
+        </p>
+      ) : null}
 
       {!isAdmin && canEdit && accessRootIds.length === 0 ? (
         <p className="banner-warn">

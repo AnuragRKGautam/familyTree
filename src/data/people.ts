@@ -11,29 +11,54 @@ import type {
 } from '../types/domain'
 import { DataAccessError, toDataAccessError } from './errors'
 
-function mapPerson(row: Person): Person {
-  return row
+const PEOPLE_PUBLIC_COLUMNS =
+  'id, first_name, last_name, gender, biography, photo_path, created_at, updated_at'
+const PEOPLE_FULL_COLUMNS =
+  'id, first_name, last_name, gender, birth_date, death_date, biography, photo_path, created_at, updated_at'
+
+async function sessionCanReadDates(): Promise<boolean> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  return Boolean(session?.user)
+}
+
+async function peopleSelectColumns(): Promise<string> {
+  return (await sessionCanReadDates()) ? PEOPLE_FULL_COLUMNS : PEOPLE_PUBLIC_COLUMNS
+}
+
+function mapPerson(row: Record<string, unknown>): Person {
+  return {
+    id: row.id as string,
+    first_name: row.first_name as string,
+    last_name: row.last_name as string,
+    gender: row.gender as Person['gender'],
+    birth_date: (row.birth_date as string | null | undefined) ?? null,
+    death_date: (row.death_date as string | null | undefined) ?? null,
+    biography: (row.biography as string | null | undefined) ?? null,
+    photo_path: (row.photo_path as string | null | undefined) ?? null,
+    created_at: row.created_at as string,
+    updated_at: row.updated_at as string,
+  }
 }
 
 export async function listPeople(): Promise<Person[]> {
+  const columns = await peopleSelectColumns()
   const { data, error } = await supabase
     .from('people')
-    .select(
-      'id, first_name, last_name, gender, birth_date, death_date, biography, photo_path, created_at, updated_at',
-    )
+    .select(columns)
     .order('last_name')
     .order('first_name')
 
   if (error) throw toDataAccessError(error, 'Failed to load people')
-  return (data ?? []).map(mapPerson)
+  return (data ?? []).map((row) => mapPerson(row as unknown as Record<string, unknown>))
 }
 
 export async function getPerson(id: string): Promise<PersonWithRelations | null> {
+  const columns = await peopleSelectColumns()
   const { data: person, error } = await supabase
     .from('people')
-    .select(
-      'id, first_name, last_name, gender, birth_date, death_date, biography, photo_path, created_at, updated_at',
-    )
+    .select(columns)
     .eq('id', id)
     .maybeSingle()
 
@@ -61,7 +86,7 @@ export async function getPerson(id: string): Promise<PersonWithRelations | null>
   const sibling_ids = await listSiblingIds(id, parent_ids)
 
   return {
-    ...(person as Person),
+    ...mapPerson(person as unknown as Record<string, unknown>),
     aliases: (aliasesRes.data ?? []).map((r) => r.alias as string),
     parent_ids,
     child_ids,
@@ -159,12 +184,9 @@ export async function searchPeople(query: string): Promise<PersonSearchResult[]>
 }
 
 export async function loadTreePayload(): Promise<TreePayload> {
+  const columns = await peopleSelectColumns()
   const [peopleRes, aliasesRes, partnershipsRes, parentChildRes] = await Promise.all([
-    supabase
-      .from('people')
-      .select(
-        'id, first_name, last_name, gender, birth_date, death_date, biography, photo_path, created_at, updated_at',
-      ),
+    supabase.from('people').select(columns),
     supabase.from('person_aliases').select('id, person_id, alias'),
     supabase.from('partnerships').select('id, person_a_id, person_b_id'),
     supabase.from('parent_child').select('id, parent_id, child_id'),
@@ -180,7 +202,9 @@ export async function loadTreePayload(): Promise<TreePayload> {
   }
 
   return {
-    people: (peopleRes.data ?? []) as Person[],
+    people: (peopleRes.data ?? []).map((row) =>
+      mapPerson(row as unknown as Record<string, unknown>),
+    ),
     aliases: (aliasesRes.data ?? []) as PersonAlias[],
     partnerships: (partnershipsRes.data ?? []) as Partnership[],
     parentChildren: (parentChildRes.data ?? []) as ParentChild[],

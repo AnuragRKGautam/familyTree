@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../app/useAuth'
 import { DataAccessError } from '../data/errors'
 import { StatusMessage } from './StatusMessage'
@@ -21,6 +21,10 @@ export function SignInPage() {
     )
   }
 
+  if (status === 'ready' || status === 'unapproved') {
+    return <Navigate to="/tree" replace />
+  }
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
     setSubmitting(true)
@@ -38,14 +42,13 @@ export function SignInPage() {
     <main className="auth-page">
       <div className="auth-card">
         <h1>Family Tree</h1>
-        <p className="lede">Sign in with your approved account.</p>
         <p className="lede">
-          New relative? <Link to="/signup">Create an account</Link> (an admin must invite or
-          approve you).
+          The tree is <Link to="/tree">public to browse</Link>. Sign in to see birth/death dates and
+          (if approved) edit family records.
         </p>
         <p className="lede">
-          Or open the <Link to="/prototype">local chart prototype</Link> (fictional data, no
-          sign-in).
+          New relative? <Link to="/signup">Create an account</Link> (an admin must invite or
+          approve you for editing).
         </p>
         <form onSubmit={onSubmit} className="stack-form">
           <label>

@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom'
+import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom'
 import { AuthProvider } from './app/AuthProvider'
 import { useAuth } from './app/useAuth'
 import { SignInPage } from './components/SignInPage'
@@ -21,14 +21,52 @@ function PersonEditPage() {
   return <PersonForm key={personId ?? 'edit'} />
 }
 
+/** Tree + profile viewing — no login required. */
+function PublicLayout() {
+  const { status, errorMessage } = useAuth()
+
+  if (status === 'loading') {
+    return <StatusMessage title="Loading…" />
+  }
+  if (status === 'unconfigured') {
+    return (
+      <StatusMessage
+        variant="error"
+        title="Supabase is not configured"
+        detail="Copy .env.example to .env and set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+      />
+    )
+  }
+  if (status === 'error') {
+    return (
+      <StatusMessage
+        variant="error"
+        title="Something went wrong"
+        detail={errorMessage ?? 'Unexpected auth error'}
+      />
+    )
+  }
+  return <Outlet />
+}
+
+/** Edit / admin routes — approved accounts only. */
 function AuthedLayout() {
   const { status, errorMessage, signOut } = useAuth()
 
   if (status === 'loading') {
     return <StatusMessage title="Checking session…" />
   }
-  if (status === 'unconfigured' || status === 'unauthenticated') {
-    return <SignInPage />
+  if (status === 'unconfigured') {
+    return (
+      <StatusMessage
+        variant="error"
+        title="Supabase is not configured"
+        detail="Copy .env.example to .env and set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+      />
+    )
+  }
+  if (status === 'unauthenticated') {
+    return <Navigate to="/signin" replace />
   }
   if (status === 'unapproved') {
     return (
@@ -36,8 +74,11 @@ function AuthedLayout() {
         <StatusMessage
           variant="error"
           title="Permission denied"
-          detail="Your account is signed in but not approved yet. Ask an admin to approve your profile."
+          detail="Your account is signed in but not approved yet. You can browse the public tree; ask an admin to approve you before editing."
         />
+        <p>
+          <Link to="/tree">Back to tree</Link>
+        </p>
         <button type="button" onClick={() => void signOut()}>
           Sign out
         </button>
@@ -64,13 +105,17 @@ export default function App() {
           <Route path="/prototype" element={<PrototypePage />} />
           <Route path="/docs-limitations" element={<LimitationsPage />} />
           <Route path="/signup" element={<SignUpPage />} />
+          <Route path="/signin" element={<SignInPage />} />
           <Route path="/" element={<Navigate to="/tree" replace />} />
 
-          <Route element={<AuthedLayout />}>
+          <Route element={<PublicLayout />}>
             <Route path="/tree" element={<TreePage />} />
             <Route path="/tree/:personId" element={<TreePage />} />
-            <Route path="/people/new" element={<PersonNewPage />} />
             <Route path="/people/:personId" element={<PersonProfilePage />} />
+          </Route>
+
+          <Route element={<AuthedLayout />}>
+            <Route path="/people/new" element={<PersonNewPage />} />
             <Route path="/people/:personId/edit" element={<PersonEditPage />} />
             <Route path="/admin/profiles" element={<AdminProfiles />} />
           </Route>

@@ -45,7 +45,7 @@ function RelativeList({
 }
 
 export function PersonProfile({ personId, onFocus }: PersonProfileProps) {
-  const { canEdit, canEditPerson } = useAuth()
+  const { canEdit, canEditPerson, isLoggedIn } = useAuth()
   const [person, setPerson] = useState<PersonWithRelations | null>(null)
   const [relatives, setRelatives] = useState<Map<string, Person>>(new Map())
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
@@ -119,9 +119,16 @@ export function PersonProfile({ personId, onFocus }: PersonProfileProps) {
           {person.aliases.length > 0 ? (
             <p className="muted">Also known as: {person.aliases.join(', ')}</p>
           ) : null}
-          <p className="muted">
-            {[person.birth_date, person.death_date].filter(Boolean).join(' – ') || 'Dates unknown'}
-          </p>
+          {isLoggedIn ? (
+            <p className="muted">
+              {[person.birth_date, person.death_date].filter(Boolean).join(' – ') ||
+                'Dates unknown'}
+            </p>
+          ) : (
+            <p className="muted">
+              <Link to="/signin">Sign in</Link> to see birth and death dates.
+            </p>
+          )}
         </div>
       </header>
 

@@ -16,6 +16,8 @@ export interface AuthContextValue {
   user: User | null
   profile: Profile | null
   errorMessage: string | null
+  /** True when a session exists (approved or waiting for approval). */
+  isLoggedIn: boolean
   canEdit: boolean
   isAdmin: boolean
   /** null = unrestricted (admin). Set = only these person ids (+ new orphans via RLS). */
