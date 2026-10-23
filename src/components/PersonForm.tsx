@@ -59,6 +59,11 @@ export function PersonForm() {
   const [linkPartnerId, setLinkPartnerId] = useState('')
   const [linkChildId, setLinkChildId] = useState('')
   const [linkSiblingId, setLinkSiblingId] = useState('')
+  /** Children selected to also get the new partner as a parent. */
+  const [partnerShareChildIds, setPartnerShareChildIds] = useState<string[]>([])
+  const [partnerAlreadyParentOf, setPartnerAlreadyParentOf] = useState<Set<string>>(
+    () => new Set(),
+  )
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(!isNewRoute)
   const [saving, setSaving] = useState(false)
@@ -80,6 +85,8 @@ export function PersonForm() {
       setLinkPartnerId('')
       setLinkChildId('')
       setLinkSiblingId('')
+      setPartnerShareChildIds([])
+      setPartnerAlreadyParentOf(new Set())
       setPhotoFile(null)
       setLoading(false)
       setError(null)
@@ -102,6 +109,32 @@ export function PersonForm() {
     if (!canEdit) return
     void listPeople().then(setPeople).catch(() => setPeople([]))
   }, [canEdit, personId])
+
+  // When picking a partner and this person already has children, offer to attach
+  // the partner as a parent of selected children (default: all not already linked).
+  useEffect(() => {
+    if (!linkPartnerId) {
+      setPartnerShareChildIds([])
+      setPartnerAlreadyParentOf(new Set())
+      return
+    }
+    let cancelled = false
+    void getPerson(linkPartnerId)
+      .then((partner) => {
+        if (cancelled) return
+        const already = new Set(partner?.child_ids ?? [])
+        setPartnerAlreadyParentOf(already)
+        setPartnerShareChildIds(childIds.filter((id) => !already.has(id)))
+      })
+      .catch(() => {
+        if (cancelled) return
+        setPartnerAlreadyParentOf(new Set())
+        setPartnerShareChildIds([...childIds])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [linkPartnerId, childIds])
 
   useEffect(() => {
     if (!personId) return
@@ -261,11 +294,34 @@ export function PersonForm() {
 
   async function linkPartner() {
     if (!personId || !linkPartnerId) return
+    const partnerId = linkPartnerId
+    const shareIds = [...partnerShareChildIds]
     await withLinkError(async () => {
-      await addPartnership(personId, linkPartnerId)
+      await addPartnership(personId, partnerId)
+      let attached = 0
+      for (const childId of shareIds) {
+        if (partnerAlreadyParentOf.has(childId)) continue
+        await addParentChild(partnerId, childId)
+        attached += 1
+      }
       setLinkPartnerId('')
+      setPartnerShareChildIds([])
+      setPartnerAlreadyParentOf(new Set())
       await refreshRelations(personId)
+      if (attached > 0) {
+        setNotice(
+          attached === 1
+            ? 'Partner linked and set as parent of 1 selected child.'
+            : `Partner linked and set as parent of ${attached} selected children.`,
+        )
+      }
     })
+  }
+
+  function togglePartnerShareChild(childId: string) {
+    setPartnerShareChildIds((prev) =>
+      prev.includes(childId) ? prev.filter((id) => id !== childId) : [...prev, childId],
+    )
   }
 
   async function linkChild() {
@@ -444,26 +500,100 @@ export function PersonForm() {
               linking={linking}
             />
 
-            <RelationBlock
-              title="Partner / spouse"
-              hint="Search and link a spouse or partner."
-              selectValue={linkPartnerId}
-              onSelectChange={setLinkPartnerId}
-              options={otherPeople}
-              excludeIds={[...partnerIds]}
-              linkedIds={partnerIds}
-              linkLabel="Link partner"
-              onLink={() => void linkPartner()}
-              onRemove={(id) =>
-                void withLinkError(async () => {
-                  if (!personId) return
-                  await removePartnership(personId, id)
-                  await refreshRelations(personId)
-                })
-              }
-              personLabel={personLabel}
-              linking={linking}
-            />
+            <div className="relation-group">
+              <h3>Partner / spouse</h3>
+              <p className="muted small">
+                Search and link a spouse or partner. If this person already has children, you can
+                also make the partner a parent of selected children.
+              </p>
+              <div className="relation-row">
+                <PersonSearchSelect
+                  people={otherPeople}
+                  value={linkPartnerId}
+                  onChange={setLinkPartnerId}
+                  excludeIds={[...partnerIds]}
+                  disabled={linking || otherPeople.length === 0}
+                  placeholder="Search partner / spouse…"
+                />
+                <button
+                  type="button"
+                  disabled={!linkPartnerId || linking}
+                  onClick={() => void linkPartner()}
+                >
+                  Link partner
+                </button>
+              </div>
+              {linkPartnerId && childIds.length > 0 ? (
+                <div className="partner-share-children">
+                  <p className="muted small">
+                    Also set this partner as parent of:
+                  </p>
+                  <div className="partner-share-actions">
+                    <button
+                      type="button"
+                      className="linkish"
+                      disabled={linking}
+                      onClick={() =>
+                        setPartnerShareChildIds(
+                          childIds.filter((id) => !partnerAlreadyParentOf.has(id)),
+                        )
+                      }
+                    >
+                      Select all
+                    </button>
+                    <button
+                      type="button"
+                      className="linkish"
+                      disabled={linking}
+                      onClick={() => setPartnerShareChildIds([])}
+                    >
+                      Select none
+                    </button>
+                  </div>
+                  <ul className="checkbox-list">
+                    {childIds.map((childId) => {
+                      const already = partnerAlreadyParentOf.has(childId)
+                      return (
+                        <li key={childId}>
+                          <label className={already ? 'muted' : undefined}>
+                            <input
+                              type="checkbox"
+                              disabled={linking || already}
+                              checked={already || partnerShareChildIds.includes(childId)}
+                              onChange={() => togglePartnerShareChild(childId)}
+                            />
+                            {personLabel(childId)}
+                            {already ? ' (already their parent)' : null}
+                          </label>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              ) : null}
+              <ul>
+                {partnerIds.length === 0 ? <li className="muted">None linked yet.</li> : null}
+                {partnerIds.map((id) => (
+                  <li key={id}>
+                    {personLabel(id)}{' '}
+                    <button
+                      type="button"
+                      className="linkish"
+                      disabled={linking}
+                      onClick={() =>
+                        void withLinkError(async () => {
+                          if (!personId) return
+                          await removePartnership(personId, id)
+                          await refreshRelations(personId)
+                        })
+                      }
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
 
             <RelationBlock
               title="Children"
