@@ -86,7 +86,7 @@ as $$
   core as (
     select d.id
     from roots r
-    cross join lateral public.descendants_of(r.id) d
+    cross join lateral public.descendants_of(r.id) as d(id)
   ),
   spouses as (
     select case
@@ -230,7 +230,7 @@ security definer
 set search_path = public
 as $$
   select s.id as person_id
-  from public.scoped_person_ids(auth.uid()) s
+  from public.scoped_person_ids(auth.uid()) as s(id)
   union
   select p.id
   from public.people p
