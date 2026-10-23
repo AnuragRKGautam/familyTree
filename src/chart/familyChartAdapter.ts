@@ -1,6 +1,7 @@
 import * as f3 from 'family-chart'
 import type { Chart, Data, TreeDatum } from 'family-chart'
 import 'family-chart/styles/family-chart.css'
+import { balanceMultipleSpouses, type ChartTree } from './balanceMultipleSpouses'
 
 export interface FamilyChartAdapterOptions {
   container: HTMLElement
@@ -49,6 +50,14 @@ export function createFamilyChartAdapter(options: FamilyChartAdapterOptions): Fa
   }
 
   chart.setAncestryDepth(ancestryDepth).setProgenyDepth(progenyDepth)
+
+  // Place multiple spouses on both sides of a person (library stacks them on one side).
+  chart.beforeUpdate = () => {
+    const tree = chart.store.getTree() as ChartTree | undefined
+    if (!tree) return
+    const nodeSeparation = chart.store.state.node_separation ?? 250
+    balanceMultipleSpouses(tree, nodeSeparation)
+  }
 
   let currentData = data
   const initialMain =

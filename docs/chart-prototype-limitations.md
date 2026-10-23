@@ -14,7 +14,7 @@ Local prototype route: `/prototype` (no auth, fictional in-memory data).
 
 ## Multiple partners
 
-Partnerships map to bidirectional `rels.spouses`. The free library lays partners out beside the focal person. Multiple spouses are supported in data; visual stacking/ordering can be adjusted with `setSortSpousesFunction` if needed. There is no separate “ex-spouse” styling in our prototype.
+Partnerships map to bidirectional `rels.spouses`. The free library stacks every spouse on **one** side of a person. Our adapter runs `balanceMultipleSpouses` in `chart.beforeUpdate` so two or more spouses alternate **left and right** of the person (so children of each co-parent hang under the clearer side). Ordering still follows `rels.spouses` / `sortChildrenWithSpouses`. There is no separate “ex-spouse” styling.
 
 ## Adoptive relationships
 
