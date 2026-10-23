@@ -71,19 +71,34 @@ where email = 'you@example.com';
 
 New sign-ups get `profiles.approved = false` until an admin approves them under **Access** in the app.
 
-## Manual Cloudflare Pages setup
+## Manual Cloudflare Pages / Workers setup
 
-Deployment has **not** been performed by the project scaffolding. When you are ready:
+`familytree.pages.dev` may still be an **old** static site. Connect this GitHub repo (`AnuragRKGautam/familyTree`, branch `main`) so deploys use the Vite app.
 
-1. Create a Cloudflare Pages project linked to this repository (or upload the `dist/` output).
-2. Build settings:
-   - **Build command:** `npm run build`
-   - **Build output directory:** `dist`
-3. Environment variables:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-4. SPA routing: do **not** add a catch-all `_redirects` rule to `/index.html` (Cloudflare rejects it as an infinite loop). With no top-level `404.html`, Pages serves the SPA root for unknown paths automatically.
-5. After the first deploy, sign in and smoke-test search, chart focus, profile, and (as editor) edit flows.
+### If you see **Build output directory** (classic Pages)
+
+| Setting | Value |
+|--------|--------|
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+| Root directory | `/` (empty) |
+
+### If you do **not** see Output directory (Workers Builds UI)
+
+That UI only has build/deploy commands. Output dir comes from [`wrangler.toml`](wrangler.toml):
+
+| Setting | Value |
+|--------|--------|
+| Build command | `npm run build` |
+| Deploy command | `npx wrangler deploy` (default is fine) |
+| Root directory | leave empty |
+
+Also set **build** env vars (Vite bakes them in at build time):
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+
+SPA fallback is configured via `not_found_handling = "single-page-application"` in `wrangler.toml` (do not use a catch-all `_redirects` to `/index.html`).
 
 ## Roles
 
