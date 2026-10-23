@@ -103,7 +103,7 @@ Unauthenticated or `approved = false` users cannot read application data (RLS + 
 
 ### Phase 6 — Deploy readiness
 
-- [x] Cloudflare Pages config (`public/_redirects`, `_headers`); README with honest manual setup steps
+- [x] Cloudflare Pages config (`public/_headers`; SPA fallback via Pages default when no `404.html`); README with honest manual setup steps
 - **Accept:** build ready; no secrets in repo; deploy claimed only if verified
 - **Note:** Live Cloudflare/Supabase deployment was not performed by the agent.
 

@@ -65,7 +65,7 @@ Deployment has **not** been performed by the project scaffolding. When you are r
 3. Environment variables:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
-4. SPA routing is covered by [`public/_redirects`](public/_redirects) (`/* → /index.html` 200).
+4. SPA routing: do **not** add a catch-all `_redirects` rule to `/index.html` (Cloudflare rejects it as an infinite loop). With no top-level `404.html`, Pages serves the SPA root for unknown paths automatically.
 5. After the first deploy, sign in and smoke-test search, chart focus, profile, and (as editor) edit flows.
 
 ## Roles
