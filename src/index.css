@@ -434,10 +434,20 @@ button.button-link:hover {
   background: transparent;
   border-radius: 6px;
   padding: 0.45rem 0.55rem;
+  display: grid;
+  gap: 0.15rem;
 }
 
 .person-search-options button:hover {
   background: rgba(15, 118, 110, 0.08);
+}
+
+.person-option-name {
+  font-weight: 600;
+}
+
+.person-option-spouse {
+  font-size: 0.85em;
 }
 
 .banner-warn {

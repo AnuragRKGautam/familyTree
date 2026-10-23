@@ -183,6 +183,14 @@ export async function searchPeople(query: string): Promise<PersonSearchResult[]>
   )
 }
 
+export async function listPartnerships(): Promise<Partnership[]> {
+  const { data, error } = await supabase
+    .from('partnerships')
+    .select('id, person_a_id, person_b_id')
+  if (error) throw toDataAccessError(error, 'Failed to load partnerships')
+  return (data ?? []) as Partnership[]
+}
+
 export async function loadTreePayload(): Promise<TreePayload> {
   const columns = await peopleSelectColumns()
   const [peopleRes, aliasesRes, partnershipsRes, parentChildRes] = await Promise.all([

@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { Person } from '../types/domain'
+import { formatPersonPickerLabel } from '../data/personLabels'
 
 interface PersonSearchSelectProps {
   people: Person[]
@@ -8,13 +9,8 @@ interface PersonSearchSelectProps {
   placeholder?: string
   disabled?: boolean
   excludeIds?: string[]
-}
-
-function labelFor(person: Person): string {
-  const dates = [person.birth_date, person.death_date].filter(Boolean).join(' – ')
-  return dates
-    ? `${person.first_name} ${person.last_name} (${dates})`
-    : `${person.first_name} ${person.last_name}`
+  /** person id → spouse display names (shown to disambiguate duplicate names) */
+  spouseNamesByPersonId?: Map<string, string[]>
 }
 
 export function PersonSearchSelect({
@@ -24,6 +20,7 @@ export function PersonSearchSelect({
   placeholder = 'Search people by name…',
   disabled = false,
   excludeIds = [],
+  spouseNamesByPersonId,
 }: PersonSearchSelectProps) {
   const listId = useId()
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -37,33 +34,42 @@ export function PersonSearchSelect({
 
   const selected = available.find((p) => p.id === value) ?? null
 
+  const selectedLabel = useMemo(
+    () =>
+      selected
+        ? formatPersonPickerLabel(selected, spouseNamesByPersonId?.get(selected.id))
+        : '',
+    [selected, spouseNamesByPersonId],
+  )
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return available.slice(0, 40)
     return available
       .filter((p) => {
-        const hay = `${p.first_name} ${p.last_name}`.toLowerCase()
+        const spouses = spouseNamesByPersonId?.get(p.id)?.join(' ') ?? ''
+        const hay = `${p.first_name} ${p.last_name} ${spouses}`.toLowerCase()
         return hay.includes(q)
       })
       .slice(0, 40)
-  }, [available, query])
+  }, [available, query, spouseNamesByPersonId])
 
   useEffect(() => {
-    if (selected) setQuery(labelFor(selected))
+    if (selected) setQuery(selectedLabel)
     else if (!value) setQuery('')
-  }, [selected, value])
+  }, [selected, value, selectedLabel])
 
   useEffect(() => {
     function onDocMouseDown(event: MouseEvent) {
       if (!rootRef.current?.contains(event.target as Node)) {
         setOpen(false)
-        if (selected) setQuery(labelFor(selected))
+        if (selected) setQuery(selectedLabel)
         else setQuery('')
       }
     }
     document.addEventListener('mousedown', onDocMouseDown)
     return () => document.removeEventListener('mousedown', onDocMouseDown)
-  }, [selected])
+  }, [selected, selectedLabel])
 
   return (
     <div className="person-search-select" ref={rootRef}>
@@ -103,20 +109,38 @@ export function PersonSearchSelect({
           {filtered.length === 0 ? (
             <li className="muted">No matching people</li>
           ) : (
-            filtered.map((p) => (
-              <li key={p.id} role="option" aria-selected={p.id === value}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChange(p.id)
-                    setQuery(labelFor(p))
-                    setOpen(false)
-                  }}
-                >
-                  {labelFor(p)}
-                </button>
-              </li>
-            ))
+            filtered.map((p) => {
+              const spouses = spouseNamesByPersonId?.get(p.id) ?? []
+              const name = `${p.first_name} ${p.last_name}`.trim()
+              const dates = [p.birth_date, p.death_date].filter(Boolean).join(' – ')
+              return (
+                <li key={p.id} role="option" aria-selected={p.id === value}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChange(p.id)
+                      setQuery(
+                        formatPersonPickerLabel(p, spouseNamesByPersonId?.get(p.id)),
+                      )
+                      setOpen(false)
+                    }}
+                  >
+                    <span className="person-option-name">
+                      {name}
+                      {dates ? <span className="muted"> ({dates})</span> : null}
+                    </span>
+                    {spouses.length > 0 ? (
+                      <span className="person-option-spouse muted">
+                        {spouses.length === 1 ? 'Spouse: ' : 'Spouses: '}
+                        {spouses.join(', ')}
+                      </span>
+                    ) : (
+                      <span className="person-option-spouse muted">No spouse linked</span>
+                    )}
+                  </button>
+                </li>
+              )
+            })
           )}
         </ul>
       ) : null}

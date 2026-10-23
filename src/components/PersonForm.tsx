@@ -6,14 +6,16 @@ import {
   createPerson,
   getPerson,
   linkSiblingViaParents,
+  listPartnerships,
   listPeople,
   removeParentChild,
   removePartnership,
   updatePerson,
 } from '../data/people'
+import { buildSpouseNamesByPersonId, formatPersonPickerLabel } from '../data/personLabels'
 import { uploadPersonPhoto } from '../data/photos'
 import { DataAccessError } from '../data/errors'
-import type { Gender, Person, PersonWriteInput } from '../types/domain'
+import type { Gender, Partnership, Person, PersonWriteInput } from '../types/domain'
 import { useAuth } from '../app/useAuth'
 import { StatusMessage } from './StatusMessage'
 import { PersonSearchSelect } from './PersonSearchSelect'
@@ -51,6 +53,7 @@ export function PersonForm() {
   const [form, setForm] = useState<PersonWriteInput>(emptyForm)
   const [aliasText, setAliasText] = useState('')
   const [people, setPeople] = useState<Person[]>([])
+  const [partnerships, setPartnerships] = useState<Partnership[]>([])
   const [parentIds, setParentIds] = useState<string[]>([])
   const [partnerIds, setPartnerIds] = useState<string[]>([])
   const [childIds, setChildIds] = useState<string[]>([])
@@ -107,8 +110,21 @@ export function PersonForm() {
 
   useEffect(() => {
     if (!canEdit) return
-    void listPeople().then(setPeople).catch(() => setPeople([]))
+    void Promise.all([listPeople(), listPartnerships()])
+      .then(([nextPeople, nextPartnerships]) => {
+        setPeople(nextPeople)
+        setPartnerships(nextPartnerships)
+      })
+      .catch(() => {
+        setPeople([])
+        setPartnerships([])
+      })
   }, [canEdit, personId])
+
+  const spouseNamesByPersonId = useMemo(
+    () => buildSpouseNamesByPersonId(people, partnerships),
+    [people, partnerships],
+  )
 
   // When picking a partner and this person already has children, offer to attach
   // the partner as a parent of selected children (default: all not already linked).
@@ -280,7 +296,12 @@ export function PersonForm() {
     setPartnerIds(detail.partner_ids)
     setChildIds(detail.child_ids)
     setSiblingIds(detail.sibling_ids)
-    setPeople(await listPeople())
+    const [nextPeople, nextPartnerships] = await Promise.all([
+      listPeople(),
+      listPartnerships(),
+    ])
+    setPeople(nextPeople)
+    setPartnerships(nextPartnerships)
   }
 
   async function linkParent() {
@@ -344,7 +365,8 @@ export function PersonForm() {
 
   function personLabel(id: string): string {
     const p = people.find((x) => x.id === id)
-    return p ? `${p.first_name} ${p.last_name}` : id
+    if (!p) return id
+    return formatPersonPickerLabel(p, spouseNamesByPersonId.get(id), { includeDates: false })
   }
 
   return (
@@ -498,6 +520,7 @@ export function PersonForm() {
               }
               personLabel={personLabel}
               linking={linking}
+              spouseNamesByPersonId={spouseNamesByPersonId}
             />
 
             <div className="relation-group">
@@ -514,6 +537,7 @@ export function PersonForm() {
                   excludeIds={[...partnerIds]}
                   disabled={linking || otherPeople.length === 0}
                   placeholder="Search partner / spouse…"
+                  spouseNamesByPersonId={spouseNamesByPersonId}
                 />
                 <button
                   type="button"
@@ -614,6 +638,7 @@ export function PersonForm() {
               }
               personLabel={personLabel}
               linking={linking}
+              spouseNamesByPersonId={spouseNamesByPersonId}
             />
 
             <div className="relation-group">
@@ -633,6 +658,7 @@ export function PersonForm() {
                     excludeIds={siblingIds}
                     disabled={linking}
                     placeholder="Search sibling by name…"
+                    spouseNamesByPersonId={spouseNamesByPersonId}
                   />
                   <button
                     type="button"
@@ -673,6 +699,7 @@ function RelationBlock({
   onRemove,
   personLabel,
   linking,
+  spouseNamesByPersonId,
 }: {
   title: string
   hint: string
@@ -686,6 +713,7 @@ function RelationBlock({
   onRemove: (id: string) => void
   personLabel: (id: string) => string
   linking: boolean
+  spouseNamesByPersonId?: Map<string, string[]>
 }) {
   return (
     <div className="relation-group">
@@ -699,6 +727,7 @@ function RelationBlock({
           excludeIds={excludeIds}
           disabled={linking || options.length === 0}
           placeholder={`Search ${title.toLowerCase()}…`}
+          spouseNamesByPersonId={spouseNamesByPersonId}
         />
         <button type="button" disabled={!selectValue || linking} onClick={onLink}>
           {linkLabel}

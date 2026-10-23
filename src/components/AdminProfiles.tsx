@@ -10,9 +10,10 @@ import {
   type Invite,
 } from '../data/invites'
 import { listAccessGrants, setAccessRoot, type AccessGrant } from '../data/access'
-import { listPeople } from '../data/people'
+import { listPartnerships, listPeople } from '../data/people'
+import { buildSpouseNamesByPersonId } from '../data/personLabels'
 import { DataAccessError } from '../data/errors'
-import type { Person, Profile, UserRole } from '../types/domain'
+import type { Partnership, Person, Profile, UserRole } from '../types/domain'
 import { useAuth } from '../app/useAuth'
 import { StatusMessage } from './StatusMessage'
 import { PersonSearchSelect } from './PersonSearchSelect'
@@ -23,6 +24,7 @@ export function AdminProfiles() {
   const [invites, setInvites] = useState<Invite[]>([])
   const [grants, setGrants] = useState<AccessGrant[]>([])
   const [people, setPeople] = useState<Person[]>([])
+  const [partnerships, setPartnerships] = useState<Partnership[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -37,6 +39,11 @@ export function AdminProfiles() {
     [people],
   )
 
+  const spouseNamesByPersonId = useMemo(
+    () => buildSpouseNamesByPersonId(people, partnerships),
+    [people, partnerships],
+  )
+
   const rootByProfile = useMemo(() => {
     const map = new Map<string, string>()
     for (const g of grants) map.set(g.profile_id, g.root_person_id)
@@ -44,16 +51,19 @@ export function AdminProfiles() {
   }, [grants])
 
   async function reload() {
-    const [nextProfiles, nextInvites, nextGrants, nextPeople] = await Promise.all([
-      listProfiles(),
-      listInvites(),
-      listAccessGrants(),
-      listPeople(),
-    ])
+    const [nextProfiles, nextInvites, nextGrants, nextPeople, nextPartnerships] =
+      await Promise.all([
+        listProfiles(),
+        listInvites(),
+        listAccessGrants(),
+        listPeople(),
+        listPartnerships(),
+      ])
     setProfiles(nextProfiles)
     setInvites(nextInvites)
     setGrants(nextGrants)
     setPeople(nextPeople)
+    setPartnerships(nextPartnerships)
   }
 
   useEffect(() => {
@@ -207,6 +217,7 @@ export function AdminProfiles() {
                 value={inviteRootId}
                 onChange={setInviteRootId}
                 placeholder="Search person who anchors their access…"
+                spouseNamesByPersonId={spouseNamesByPersonId}
               />
             </label>
           ) : (
@@ -308,6 +319,7 @@ export function AdminProfiles() {
                       value={rootByProfile.get(p.id) ?? ''}
                       onChange={(id) => void changeRoot(p.id, id || null)}
                       placeholder="Set family root…"
+                      spouseNamesByPersonId={spouseNamesByPersonId}
                     />
                   </td>
                   <td>
@@ -363,6 +375,7 @@ export function AdminProfiles() {
                       value={rootByProfile.get(p.id) ?? ''}
                       onChange={(id) => void changeRoot(p.id, id || null)}
                       placeholder="Search root person…"
+                      spouseNamesByPersonId={spouseNamesByPersonId}
                     />
                   )}
                 </td>
