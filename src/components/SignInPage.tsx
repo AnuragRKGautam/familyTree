@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../app/useAuth'
 import { DataAccessError } from '../data/errors'
 import { StatusMessage } from './StatusMessage'
@@ -38,6 +39,10 @@ export function SignInPage() {
       <div className="auth-card">
         <h1>Family Tree</h1>
         <p className="lede">Sign in with your approved account.</p>
+        <p className="lede">
+          Or open the <Link to="/prototype">local chart prototype</Link> (fictional
+          data, no sign-in).
+        </p>
         <form onSubmit={onSubmit} className="stack-form">
           <label>
             Email

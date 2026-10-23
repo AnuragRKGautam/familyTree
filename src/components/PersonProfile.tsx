@@ -125,19 +125,20 @@ export function PersonProfile({ personId, onFocus }: PersonProfileProps) {
         </div>
       </header>
 
+      {canEdit ? (
+        <p>
+          <Link to={`/people/${person.id}/edit`}>Edit record (link parents, partner, children, siblings)</Link>
+        </p>
+      ) : null}
+
       {person.biography ? <p className="biography">{person.biography}</p> : (
         <p className="muted">No biography yet.</p>
       )}
 
       <RelativeList ids={person.parent_ids} label="Parents" relatives={relatives} onFocus={onFocus} />
       <RelativeList ids={person.partner_ids} label="Partners" relatives={relatives} onFocus={onFocus} />
+      <RelativeList ids={person.sibling_ids} label="Siblings" relatives={relatives} onFocus={onFocus} />
       <RelativeList ids={person.child_ids} label="Children" relatives={relatives} onFocus={onFocus} />
-
-      {canEdit ? (
-        <p>
-          <Link to={`/people/${person.id}/edit`}>Edit record</Link>
-        </p>
-      ) : null}
     </article>
   )
 }

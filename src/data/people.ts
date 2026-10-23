@@ -56,13 +56,46 @@ export async function getPerson(id: string): Promise<PersonWithRelations | null>
     ...(partnersA.data ?? []).map((r) => r.person_b_id as string),
     ...(partnersB.data ?? []).map((r) => r.person_a_id as string),
   ]
+  const parent_ids = (parentsRes.data ?? []).map((r) => r.parent_id as string)
+  const child_ids = (childrenRes.data ?? []).map((r) => r.child_id as string)
+  const sibling_ids = await listSiblingIds(id, parent_ids)
 
   return {
     ...(person as Person),
     aliases: (aliasesRes.data ?? []).map((r) => r.alias as string),
-    parent_ids: (parentsRes.data ?? []).map((r) => r.parent_id as string),
-    child_ids: (childrenRes.data ?? []).map((r) => r.child_id as string),
+    parent_ids,
+    child_ids,
     partner_ids,
+    sibling_ids,
+  }
+}
+
+/** Other children of any of the given parents (excludes personId). */
+export async function listSiblingIds(personId: string, parentIds: string[]): Promise<string[]> {
+  if (parentIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('parent_child')
+    .select('child_id')
+    .in('parent_id', parentIds)
+    .neq('child_id', personId)
+  if (error) throw toDataAccessError(error, 'Failed to load siblings')
+  return [...new Set((data ?? []).map((r) => r.child_id as string))]
+}
+
+/** Make siblingId a child of each of personId's current parents (shared parents ⇒ siblings). */
+export async function linkSiblingViaParents(
+  personId: string,
+  siblingId: string,
+  parentIds: string[],
+): Promise<void> {
+  if (personId === siblingId) {
+    throw new DataAccessError('A person cannot be their own sibling')
+  }
+  if (parentIds.length === 0) {
+    throw new DataAccessError('Add at least one parent before linking a sibling')
+  }
+  for (const parentId of parentIds) {
+    await addParentChild(parentId, siblingId)
   }
 }
 

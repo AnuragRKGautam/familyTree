@@ -1,5 +1,4 @@
-import type { ReactNode } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom'
 import { AuthProvider } from './app/AuthProvider'
 import { useAuth } from './app/useAuth'
 import { SignInPage } from './components/SignInPage'
@@ -8,8 +7,20 @@ import { TreePage } from './components/TreePage'
 import { PersonForm } from './components/PersonForm'
 import { AdminProfiles } from './components/AdminProfiles'
 import { PersonProfilePage } from './components/PersonProfilePage'
+import { PrototypePage } from './prototype/PrototypePage'
+import { LimitationsPage } from './prototype/LimitationsPage'
 
-function Gate({ children }: { children: ReactNode }) {
+/** Force a fresh form instance when switching new ↔ edit (same component type). */
+function PersonNewPage() {
+  return <PersonForm key="new" />
+}
+
+function PersonEditPage() {
+  const { personId } = useParams<{ personId: string }>()
+  return <PersonForm key={personId ?? 'edit'} />
+}
+
+function AuthedLayout() {
   const { status, errorMessage, signOut } = useAuth()
 
   if (status === 'loading') {
@@ -41,31 +52,29 @@ function Gate({ children }: { children: ReactNode }) {
       />
     )
   }
-  return children
-}
-
-function AppRoutes() {
-  return (
-    <Gate>
-      <Routes>
-        <Route path="/" element={<Navigate to="/tree" replace />} />
-        <Route path="/tree" element={<TreePage />} />
-        <Route path="/tree/:personId" element={<TreePage />} />
-        <Route path="/people/new" element={<PersonForm />} />
-        <Route path="/people/:personId" element={<PersonProfilePage />} />
-        <Route path="/people/:personId/edit" element={<PersonForm />} />
-        <Route path="/admin/profiles" element={<AdminProfiles />} />
-        <Route path="*" element={<Navigate to="/tree" replace />} />
-      </Routes>
-    </Gate>
-  )
+  return <Outlet />
 }
 
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <Routes>
+          <Route path="/prototype" element={<PrototypePage />} />
+          <Route path="/docs-limitations" element={<LimitationsPage />} />
+          <Route path="/" element={<Navigate to="/tree" replace />} />
+
+          <Route element={<AuthedLayout />}>
+            <Route path="/tree" element={<TreePage />} />
+            <Route path="/tree/:personId" element={<TreePage />} />
+            <Route path="/people/new" element={<PersonNewPage />} />
+            <Route path="/people/:personId" element={<PersonProfilePage />} />
+            <Route path="/people/:personId/edit" element={<PersonEditPage />} />
+            <Route path="/admin/profiles" element={<AdminProfiles />} />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/tree" replace />} />
+        </Routes>
       </AuthProvider>
     </BrowserRouter>
   )

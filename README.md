@@ -11,7 +11,22 @@ Private interactive family-tree website for approved relatives. Static React fro
 
 No paid chart libraries, email providers, or search services. No service-role keys in the browser.
 
-## Local development
+## Local chart prototype (no backend)
+
+Before wiring more backend work, review the fictional chart:
+
+```bash
+npm install
+npm run dev
+```
+
+Open **http://localhost:5173/prototype**
+
+- ~36 fictional people (four generations, half-siblings, adoptive links, disconnected Ash branch, repeated names)
+- Search, selection, profile panel, focus, fit-to-view, zoom/pan
+- Limitations: [docs/chart-prototype-limitations.md](docs/chart-prototype-limitations.md)
+
+## Local development (full app + Supabase)
 
 ```bash
 cp .env.example .env
@@ -20,6 +35,8 @@ cp .env.example .env
 npm install
 npm run dev
 ```
+
+Signed-in app: `/` and `/tree` (auth required). Local chart prototype (no auth): `/prototype`.
 
 ### Quality checks
 

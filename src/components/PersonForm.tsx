@@ -1,10 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   addParentChild,
   addPartnership,
   createPerson,
   getPerson,
+  linkSiblingViaParents,
   listPeople,
   removeParentChild,
   removePartnership,
@@ -15,6 +16,7 @@ import { DataAccessError } from '../data/errors'
 import type { Gender, Person, PersonWriteInput } from '../types/domain'
 import { useAuth } from '../app/useAuth'
 import { StatusMessage } from './StatusMessage'
+import { PersonSearchSelect } from './PersonSearchSelect'
 
 const emptyForm: PersonWriteInput = {
   first_name: '',
@@ -27,10 +29,23 @@ const emptyForm: PersonWriteInput = {
 }
 
 export function PersonForm() {
-  const { personId } = useParams<{ personId: string }>()
-  const isEdit = Boolean(personId) && personId !== 'new'
+  const { personId: routePersonId } = useParams<{ personId: string }>()
+  const [searchParams] = useSearchParams()
+  const returnTo = searchParams.get('returnTo')
+  const isNewRoute = !routePersonId || routePersonId === 'new'
   const navigate = useNavigate()
   const { canEdit } = useAuth()
+
+  const [savedId, setSavedId] = useState<string | null>(isNewRoute ? null : (routePersonId ?? null))
+  const personId = isNewRoute ? null : savedId
+  const isEdit = Boolean(personId)
+
+  const addPersonHref = useMemo(() => {
+    const currentId = isNewRoute ? null : (savedId ?? routePersonId)
+    if (!currentId) return '/people/new'
+    const back = `/people/${currentId}/edit`
+    return `/people/new?returnTo=${encodeURIComponent(back)}`
+  }, [isNewRoute, savedId, routePersonId])
 
   const [form, setForm] = useState<PersonWriteInput>(emptyForm)
   const [aliasText, setAliasText] = useState('')
@@ -38,21 +53,57 @@ export function PersonForm() {
   const [parentIds, setParentIds] = useState<string[]>([])
   const [partnerIds, setPartnerIds] = useState<string[]>([])
   const [childIds, setChildIds] = useState<string[]>([])
+  const [siblingIds, setSiblingIds] = useState<string[]>([])
   const [linkParentId, setLinkParentId] = useState('')
   const [linkPartnerId, setLinkPartnerId] = useState('')
   const [linkChildId, setLinkChildId] = useState('')
+  const [linkSiblingId, setLinkSiblingId] = useState('')
   const [photoFile, setPhotoFile] = useState<File | null>(null)
-  const [loading, setLoading] = useState(isEdit)
+  const [loading, setLoading] = useState(!isNewRoute)
   const [saving, setSaving] = useState(false)
+  const [linking, setLinking] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  // Reset when switching between /people/new and /people/:id/edit (same component type).
+  useEffect(() => {
+    if (isNewRoute) {
+      setSavedId(null)
+      setForm(emptyForm)
+      setAliasText('')
+      setParentIds([])
+      setPartnerIds([])
+      setChildIds([])
+      setSiblingIds([])
+      setLinkParentId('')
+      setLinkPartnerId('')
+      setLinkChildId('')
+      setLinkSiblingId('')
+      setPhotoFile(null)
+      setLoading(false)
+      setError(null)
+      setNotice(
+        returnTo
+          ? 'Create the new person, then you will return to the previous edit page to link them.'
+          : null,
+      )
+      return
+    }
+    if (routePersonId && routePersonId !== 'new') {
+      setSavedId(routePersonId)
+      setLoading(true)
+      setError(null)
+      setNotice(null)
+    }
+  }, [isNewRoute, routePersonId, returnTo])
 
   useEffect(() => {
     if (!canEdit) return
     void listPeople().then(setPeople).catch(() => setPeople([]))
-  }, [canEdit])
+  }, [canEdit, personId])
 
   useEffect(() => {
-    if (!isEdit || !personId) return
+    if (!personId) return
     let cancelled = false
     setLoading(true)
     void getPerson(personId)
@@ -71,6 +122,7 @@ export function PersonForm() {
         setParentIds(person.parent_ids)
         setPartnerIds(person.partner_ids)
         setChildIds(person.child_ids)
+        setSiblingIds(person.sibling_ids)
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -83,14 +135,19 @@ export function PersonForm() {
     return () => {
       cancelled = true
     }
-  }, [isEdit, personId])
+  }, [personId])
+
+  const otherPeople = useMemo(
+    () => people.filter((p) => p.id !== personId),
+    [people, personId],
+  )
 
   if (!canEdit) {
     return (
       <StatusMessage
         variant="error"
         title="Permission denied"
-        detail="Your role cannot add or edit records."
+        detail="Your role cannot add or edit records. Set your profile role to editor or admin in Supabase."
       />
     )
   }
@@ -101,6 +158,7 @@ export function PersonForm() {
     event.preventDefault()
     setSaving(true)
     setError(null)
+    setNotice(null)
     const payload: PersonWriteInput = {
       ...form,
       aliases: aliasText
@@ -114,8 +172,24 @@ export function PersonForm() {
         : await createPerson(payload)
       if (photoFile) {
         await uploadPersonPhoto(saved.id, photoFile)
+        setPhotoFile(null)
       }
-      navigate(`/people/${saved.id}`)
+      setSavedId(saved.id)
+      setPeople((rows) => {
+        const without = rows.filter((p) => p.id !== saved.id)
+        return [...without, saved].sort((a, b) =>
+          `${a.last_name}${a.first_name}`.localeCompare(`${b.last_name}${b.first_name}`),
+        )
+      })
+      setNotice('Details saved. Use Relationships below to link family.')
+
+      if (isNewRoute && returnTo && returnTo.startsWith('/')) {
+        navigate(returnTo, { replace: true })
+        return
+      }
+      if (isNewRoute) {
+        navigate(`/people/${saved.id}/edit`, { replace: true })
+      }
     } catch (err) {
       setError(err instanceof DataAccessError ? err.message : 'Save failed')
     } finally {
@@ -123,44 +197,94 @@ export function PersonForm() {
     }
   }
 
+  async function withLinkError(action: () => Promise<void>) {
+    setLinking(true)
+    setError(null)
+    setNotice(null)
+    try {
+      await action()
+    } catch (err) {
+      setError(err instanceof DataAccessError ? err.message : 'Could not update relationship')
+    } finally {
+      setLinking(false)
+    }
+  }
+
+  async function refreshRelations(id: string) {
+    const detail = await getPerson(id)
+    if (!detail) return
+    setParentIds(detail.parent_ids)
+    setPartnerIds(detail.partner_ids)
+    setChildIds(detail.child_ids)
+    setSiblingIds(detail.sibling_ids)
+    setPeople(await listPeople())
+  }
+
   async function linkParent() {
     if (!personId || !linkParentId) return
-    try {
+    await withLinkError(async () => {
       await addParentChild(linkParentId, personId)
-      setParentIds((ids) => [...new Set([...ids, linkParentId])])
       setLinkParentId('')
-    } catch (err) {
-      setError(err instanceof DataAccessError ? err.message : 'Could not link parent')
-    }
+      await refreshRelations(personId)
+    })
   }
 
   async function linkPartner() {
     if (!personId || !linkPartnerId) return
-    try {
+    await withLinkError(async () => {
       await addPartnership(personId, linkPartnerId)
-      setPartnerIds((ids) => [...new Set([...ids, linkPartnerId])])
       setLinkPartnerId('')
-    } catch (err) {
-      setError(err instanceof DataAccessError ? err.message : 'Could not link partner')
-    }
+      await refreshRelations(personId)
+    })
   }
 
   async function linkChild() {
     if (!personId || !linkChildId) return
-    try {
+    await withLinkError(async () => {
       await addParentChild(personId, linkChildId)
-      setChildIds((ids) => [...new Set([...ids, linkChildId])])
       setLinkChildId('')
-    } catch (err) {
-      setError(err instanceof DataAccessError ? err.message : 'Could not link child')
-    }
+      await refreshRelations(personId)
+    })
   }
 
-  const otherPeople = people.filter((p) => p.id !== personId)
+  async function linkSibling() {
+    if (!personId || !linkSiblingId) return
+    await withLinkError(async () => {
+      await linkSiblingViaParents(personId, linkSiblingId, parentIds)
+      setLinkSiblingId('')
+      await refreshRelations(personId)
+    })
+  }
+
+  function personLabel(id: string): string {
+    const p = people.find((x) => x.id === id)
+    return p ? `${p.first_name} ${p.last_name}` : id
+  }
 
   return (
     <main className="page-panel">
+      <div className="form-toolbar">
+        <Link to={personId ? `/tree/${personId}` : '/tree'}>← Back to tree</Link>
+        {isEdit ? (
+          <button
+            type="button"
+            className="button-link"
+            onClick={() => navigate(addPersonHref)}
+          >
+            Add person
+          </button>
+        ) : null}
+      </div>
+
       <h1>{isEdit ? 'Edit person' : 'Add person'}</h1>
+      <p className="lede">
+        {isEdit
+          ? 'Update details, search existing people to link, or add a new person first.'
+          : returnTo
+            ? 'Create this person, then you will return to the previous edit page to link them.'
+            : 'Save the person first, then link parents, partners, children, and siblings.'}
+      </p>
+
       <form className="stack-form" onSubmit={onSubmit}>
         <label>
           First name
@@ -226,120 +350,205 @@ export function PersonForm() {
           />
         </label>
         {error ? <p className="form-error">{error}</p> : null}
+        {notice ? <p className="muted">{notice}</p> : null}
         <button type="submit" disabled={saving}>
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? 'Saving…' : isEdit ? 'Save details' : 'Create person'}
         </button>
       </form>
 
-      {isEdit && personId ? (
-        <section className="relation-editor">
+      <section className="relation-editor">
+        <div className="form-toolbar">
           <h2>Relationships</h2>
-          <div className="relation-row">
-            <select value={linkParentId} onChange={(e) => setLinkParentId(e.target.value)}>
-              <option value="">Add parent…</option>
-              {otherPeople.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.first_name} {p.last_name}
-                </option>
-              ))}
-            </select>
-            <button type="button" onClick={() => void linkParent()}>
-              Link parent
+          {isEdit ? (
+            <button
+              type="button"
+              className="button-link"
+              onClick={() => navigate(addPersonHref)}
+            >
+              Add person
             </button>
-          </div>
-          <ul>
-            {parentIds.map((id) => {
-              const p = people.find((x) => x.id === id)
-              return (
-                <li key={id}>
-                  Parent: {p ? `${p.first_name} ${p.last_name}` : id}{' '}
-                  <button
-                    type="button"
-                    className="linkish"
-                    onClick={() =>
-                      void removeParentChild(id, personId).then(() =>
-                        setParentIds((ids) => ids.filter((x) => x !== id)),
-                      )
-                    }
-                  >
-                    Remove
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
+          ) : null}
+        </div>
 
-          <div className="relation-row">
-            <select value={linkPartnerId} onChange={(e) => setLinkPartnerId(e.target.value)}>
-              <option value="">Add partner…</option>
-              {otherPeople.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.first_name} {p.last_name}
-                </option>
-              ))}
-            </select>
-            <button type="button" onClick={() => void linkPartner()}>
-              Link partner
-            </button>
-          </div>
-          <ul>
-            {partnerIds.map((id) => {
-              const p = people.find((x) => x.id === id)
-              return (
-                <li key={id}>
-                  Partner: {p ? `${p.first_name} ${p.last_name}` : id}{' '}
-                  <button
-                    type="button"
-                    className="linkish"
-                    onClick={() =>
-                      void removePartnership(personId, id).then(() =>
-                        setPartnerIds((ids) => ids.filter((x) => x !== id)),
-                      )
-                    }
-                  >
-                    Remove
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
+        {!isEdit ? (
+          <p className="muted">
+            Create and save this person above first. Then you can search and link relatives here.
+          </p>
+        ) : (
+          <>
+            <p className="muted small">
+              Type a name to search existing people, then click Link. Need someone new? Use{' '}
+              <Link to={addPersonHref}>Add person</Link> — you will come back here afterward.
+            </p>
 
-          <div className="relation-row">
-            <select value={linkChildId} onChange={(e) => setLinkChildId(e.target.value)}>
-              <option value="">Add child…</option>
-              {otherPeople.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.first_name} {p.last_name}
-                </option>
-              ))}
-            </select>
-            <button type="button" onClick={() => void linkChild()}>
-              Link child
-            </button>
-          </div>
-          <ul>
-            {childIds.map((id) => {
-              const p = people.find((x) => x.id === id)
-              return (
-                <li key={id}>
-                  Child: {p ? `${p.first_name} ${p.last_name}` : id}{' '}
+            {otherPeople.length === 0 ? (
+              <p className="muted">
+                No other people yet. <Link to={addPersonHref}>Add a person</Link> to link.
+              </p>
+            ) : null}
+
+            <RelationBlock
+              title="Parents"
+              hint="Search and link this person’s parents."
+              selectValue={linkParentId}
+              onSelectChange={setLinkParentId}
+              options={otherPeople}
+              excludeIds={[...parentIds]}
+              linkedIds={parentIds}
+              linkLabel="Link parent"
+              onLink={() => void linkParent()}
+              onRemove={(id) =>
+                void withLinkError(async () => {
+                  if (!personId) return
+                  await removeParentChild(id, personId)
+                  await refreshRelations(personId)
+                })
+              }
+              personLabel={personLabel}
+              linking={linking}
+            />
+
+            <RelationBlock
+              title="Partner / spouse"
+              hint="Search and link a spouse or partner."
+              selectValue={linkPartnerId}
+              onSelectChange={setLinkPartnerId}
+              options={otherPeople}
+              excludeIds={[...partnerIds]}
+              linkedIds={partnerIds}
+              linkLabel="Link partner"
+              onLink={() => void linkPartner()}
+              onRemove={(id) =>
+                void withLinkError(async () => {
+                  if (!personId) return
+                  await removePartnership(personId, id)
+                  await refreshRelations(personId)
+                })
+              }
+              personLabel={personLabel}
+              linking={linking}
+            />
+
+            <RelationBlock
+              title="Children"
+              hint="Search and link children."
+              selectValue={linkChildId}
+              onSelectChange={setLinkChildId}
+              options={otherPeople}
+              excludeIds={[...childIds]}
+              linkedIds={childIds}
+              linkLabel="Link child"
+              onLink={() => void linkChild()}
+              onRemove={(id) =>
+                void withLinkError(async () => {
+                  if (!personId) return
+                  await removeParentChild(personId, id)
+                  await refreshRelations(personId)
+                })
+              }
+              personLabel={personLabel}
+              linking={linking}
+            />
+
+            <div className="relation-group">
+              <h3>Siblings</h3>
+              <p className="muted small">
+                Siblings share parents. Add at least one parent first, then search for a sibling to
+                attach to the same parent(s).
+              </p>
+              {parentIds.length === 0 ? (
+                <p className="muted">Add a parent above before linking siblings.</p>
+              ) : (
+                <div className="relation-row">
+                  <PersonSearchSelect
+                    people={otherPeople}
+                    value={linkSiblingId}
+                    onChange={setLinkSiblingId}
+                    excludeIds={siblingIds}
+                    disabled={linking}
+                    placeholder="Search sibling by name…"
+                  />
                   <button
                     type="button"
-                    className="linkish"
-                    onClick={() =>
-                      void removeParentChild(personId, id).then(() =>
-                        setChildIds((ids) => ids.filter((x) => x !== id)),
-                      )
-                    }
+                    disabled={!linkSiblingId || linking}
+                    onClick={() => void linkSibling()}
                   >
-                    Remove
+                    Link sibling
                   </button>
-                </li>
-              )
-            })}
-          </ul>
-        </section>
-      ) : null}
+                </div>
+              )}
+              <ul>
+                {siblingIds.length === 0 ? <li className="muted">None linked yet.</li> : null}
+                {siblingIds.map((id) => (
+                  <li key={id}>
+                    Sibling: {personLabel(id)}{' '}
+                    <span className="muted">(unlink via shared parents if needed)</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+      </section>
     </main>
+  )
+}
+
+function RelationBlock({
+  title,
+  hint,
+  selectValue,
+  onSelectChange,
+  options,
+  excludeIds,
+  linkedIds,
+  linkLabel,
+  onLink,
+  onRemove,
+  personLabel,
+  linking,
+}: {
+  title: string
+  hint: string
+  selectValue: string
+  onSelectChange: (value: string) => void
+  options: Person[]
+  excludeIds: string[]
+  linkedIds: string[]
+  linkLabel: string
+  onLink: () => void
+  onRemove: (id: string) => void
+  personLabel: (id: string) => string
+  linking: boolean
+}) {
+  return (
+    <div className="relation-group">
+      <h3>{title}</h3>
+      <p className="muted small">{hint}</p>
+      <div className="relation-row">
+        <PersonSearchSelect
+          people={options}
+          value={selectValue}
+          onChange={onSelectChange}
+          excludeIds={excludeIds}
+          disabled={linking || options.length === 0}
+          placeholder={`Search ${title.toLowerCase()}…`}
+        />
+        <button type="button" disabled={!selectValue || linking} onClick={onLink}>
+          {linkLabel}
+        </button>
+      </div>
+      <ul>
+        {linkedIds.length === 0 ? <li className="muted">None linked yet.</li> : null}
+        {linkedIds.map((id) => (
+          <li key={id}>
+            {personLabel(id)}{' '}
+            <button type="button" className="linkish" disabled={linking} onClick={() => onRemove(id)}>
+              Remove
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }

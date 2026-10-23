@@ -55,6 +55,8 @@ export interface PersonWithRelations extends Person {
   parent_ids: string[]
   child_ids: string[]
   partner_ids: string[]
+  /** People who share at least one parent with this person. */
+  sibling_ids: string[]
 }
 
 export interface TreePayload {

@@ -248,13 +248,116 @@ button[type='submit'] {
 .relation-editor {
   margin-top: 2rem;
   display: grid;
-  gap: 0.75rem;
+  gap: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.relation-group {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.relation-group h3 {
+  margin: 0;
 }
 
 .relation-row {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.relation-row select {
+  flex: 1;
+  min-width: 12rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  background: #fff;
+}
+
+.form-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.form-toolbar h2 {
+  margin: 0;
+}
+
+.button-link {
+  display: inline-block;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-radius: 8px;
+  padding: 0.45rem 0.85rem;
+  text-decoration: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+a.button-link:hover,
+button.button-link:hover {
+  filter: brightness(0.95);
+}
+
+.person-search-select {
+  position: relative;
+  flex: 1;
+  min-width: 14rem;
+}
+
+.person-search-select input[type='search'] {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  background: #fff;
+}
+
+.person-search-select .clear-pick {
+  position: absolute;
+  right: 0.6rem;
+  top: 0.55rem;
+}
+
+.person-search-options {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0.25rem;
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.person-search-options li {
+  margin: 0;
+}
+
+.person-search-options button {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  padding: 0.45rem 0.55rem;
+}
+
+.person-search-options button:hover {
+  background: rgba(15, 118, 110, 0.08);
 }
 
 .profiles-table {
@@ -295,5 +398,107 @@ button[type='submit'] {
   .topbar {
     flex-direction: column;
     align-items: flex-start;
+  }
+}
+
+/* --- Local chart prototype --- */
+
+.prototype-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.prototype-topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 253, 248, 0.92);
+}
+
+.prototype-workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  min-height: 0;
+}
+
+.prototype-sidebar {
+  border-right: 1px solid var(--line);
+  padding: 1rem;
+  overflow: auto;
+  background: rgba(255, 253, 248, 0.8);
+  display: grid;
+  gap: 1.25rem;
+  align-content: start;
+}
+
+.prototype-controls,
+.prototype-profile {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.prototype-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.prototype-chart-pane {
+  min-height: 70vh;
+  padding: 0.5rem;
+}
+
+.prototype-chart-host,
+.prototype-chart-host.f3 {
+  width: 100%;
+  height: calc(100vh - 5rem);
+  min-height: 520px;
+  background: rgba(255, 253, 248, 0.55);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/*
+ * family-chart hardcodes relationship path stroke as #fff (dark theme).
+ * On our light chart background those links are invisible — override here.
+ */
+.prototype-chart-host.f3 path.link,
+.family-chart-host.f3 path.link {
+  stroke: #44403c !important;
+  stroke-width: 2px !important;
+}
+
+.prototype-chart-host.f3 path.link.f3-path-to-main,
+.family-chart-host.f3 path.link.f3-path-to-main {
+  stroke: #0f766e !important;
+  stroke-width: 3px !important;
+}
+
+.small {
+  font-size: 0.9rem;
+}
+
+.prototype-limitations code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+
+@media (max-width: 900px) {
+  .prototype-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .prototype-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .prototype-chart-host,
+  .prototype-chart-host.f3 {
+    height: 55vh;
   }
 }

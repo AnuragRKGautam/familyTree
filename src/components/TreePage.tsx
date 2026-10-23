@@ -63,6 +63,7 @@ export function TreePage() {
         <nav className="topbar-nav">
           {canEdit ? <Link to="/people/new">Add person</Link> : null}
           {isAdmin ? <Link to="/admin/profiles">Access</Link> : null}
+          <Link to="/prototype">Prototype</Link>
           <button type="button" className="linkish" onClick={() => void signOut()}>
             Sign out
           </button>
