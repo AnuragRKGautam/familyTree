@@ -10,6 +10,7 @@ import {
   generationDeltaAlongPath,
   generationRelativeTo,
   labelFromPathGenerations,
+  pathChartHidesPerson,
   relationSentence,
   sanitizeChartData,
 } from './findRelation'
@@ -170,23 +171,21 @@ describe('daughter-in-law’s brother and his child (Satya → Riddhi)', () => {
     expect(labelFromPathGenerations(data, path, 'F')).toBeNull()
   })
 
-  it('roots the chart at the DIL’s parent so both sides (Satya and Riddhi) show', () => {
+  it('falls back to a linear chart rooted at Satya so he appears in the graph', () => {
     const path = findShortestRelationPath(data, 'satya', 'riddhi')!
     expect(findPeakOnPath(data, path)).toBe('gparent')
-    const chart = buildPathChartData(data, path, 'satya', 'Relative by marriage')
-    const root = chart.find((d) => d.id === 'gparent')
-    expect(root?.rels.children?.sort()).toEqual(['anurag', 'ritu'])
-    expect(chart.find((d) => d.id === 'riddhi')).toBeTruthy()
-    expect(chart.find((d) => d.id === 'anurag')?.rels.children).toContain('riddhi')
-    expect(chart.find((d) => d.id === 'ritu')?.rels.spouses).toContain('avnish')
-  })
+    // Dual-branch at gparent hides Satya (parent of in-law spouse only).
+    const dual = buildPathChartData(data, path, 'satya', 'Relative by marriage')
+    expect(pathChartHidesPerson(dual, 'gparent', 'satya')).toBe(true)
 
-  it('findRelation includes Riddhi and avoids a false granddaughter label', () => {
     const result = findRelationBetween(data, 'satya', 'riddhi')
     expect(result.kinshipLabel?.toLowerCase()).not.toContain('granddaughter')
-    expect(result.chartRootId).toBe('gparent')
+    expect(result.chartRootId).toBe('satya')
+    expect(result.pathIds?.[0]).toBe('satya')
+    expect(result.pathData?.find((d) => d.id === 'satya')?.rels.children).toContain('avnish')
     expect(result.pathData?.find((d) => d.id === 'riddhi')).toBeTruthy()
-    expect(result.pathData?.find((d) => d.id === 'anurag')).toBeTruthy()
+    expect(pathChartHidesPerson(result.pathData!, 'satya', 'riddhi')).toBe(false)
+    expect(pathChartHidesPerson(result.pathData!, 'satya', 'satya')).toBe(false)
   })
 })
 

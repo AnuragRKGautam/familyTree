@@ -23,6 +23,7 @@ export function RelationFinderPage() {
   const [finding, setFinding] = useState(false)
   const [resultLabel, setResultLabel] = useState<string | null>(null)
   const [pathData, setPathData] = useState<Data | null>(null)
+  const [pathIds, setPathIds] = useState<string[] | null>(null)
   const [chartRootId, setChartRootId] = useState<string | null>(null)
   const [resultError, setResultError] = useState<string | null>(null)
 
@@ -65,6 +66,7 @@ export function RelationFinderPage() {
     setResultError(null)
     setResultLabel(null)
     setPathData(null)
+    setPathIds(null)
     setChartRootId(null)
     if (!fromId || !toId) {
       setResultError('Select both people.')
@@ -77,6 +79,7 @@ export function RelationFinderPage() {
         const result = findRelationBetween(chartData, fromId, toId)
         setResultLabel(result.kinshipLabel)
         setPathData(result.pathData)
+        setPathIds(result.pathIds)
         setChartRootId(result.chartRootId)
         if (!result.kinshipLabel && !result.pathData) {
           setResultError(relationSentence(nameOf(fromId), nameOf(toId), null))
@@ -98,6 +101,7 @@ export function RelationFinderPage() {
     setToId(fromId)
     setResultLabel(null)
     setPathData(null)
+    setPathIds(null)
     setChartRootId(null)
     setResultError(null)
   }
@@ -161,30 +165,46 @@ export function RelationFinderPage() {
         </p>
       ) : null}
 
-      {pathData && pathData.length > 0 ? (
+      {pathIds && pathIds.length > 0 ? (
         <section className="relation-path-chart" aria-label="Relation path chart">
           <h2>Connection path</h2>
-          <p className="muted small">
-            Rooted at the shared connection
-            {chartRootId ? ` (${nameOf(chartRootId)})` : ''}, with both sides of the relation.
-            Labels are relative to {nameOf(fromId)}. Click a card to open them on the main tree.
-          </p>
-          <FamilyChartView
-            data={pathData}
-            mainId={chartRootId ?? fromId}
-            onPersonClick={(id) => navigate(`/tree/${id}`)}
-            cardDisplay={[
-              ['kinship'],
-              ['first name', 'last name'],
-            ]}
-            ancestryDepth={12}
-            progenyDepth={12}
-            singleParentEmptyCard={false}
-            cardXSpacing={200}
-            cardYSpacing={90}
-            balanceSpouses={true}
-            hostClassName="family-chart-host family-chart-host--relation"
-          />
+          <ol className="relation-path-steps">
+            {pathIds.map((id, index) => (
+              <li key={id}>
+                {index > 0 ? <span className="relation-path-steps__arrow" aria-hidden="true">→</span> : null}
+                <button type="button" className="relation-path-steps__person" onClick={() => navigate(`/tree/${id}`)}>
+                  {nameOf(id)}
+                  {id === fromId ? <span className="muted"> (A)</span> : null}
+                  {id === toId ? <span className="muted"> (B)</span> : null}
+                </button>
+              </li>
+            ))}
+          </ol>
+          {pathData && pathData.length > 0 ? (
+            <>
+              <p className="muted small">
+                Tree view is rooted at {chartRootId ? nameOf(chartRootId) : nameOf(fromId)} so everyone
+                on the path appears in the graph. Labels on cards are relative to {nameOf(fromId)}.
+                Click a name or card to open them on the main tree.
+              </p>
+              <FamilyChartView
+                data={pathData}
+                mainId={chartRootId ?? fromId}
+                onPersonClick={(id) => navigate(`/tree/${id}`)}
+                cardDisplay={[
+                  ['kinship'],
+                  ['first name', 'last name'],
+                ]}
+                ancestryDepth={12}
+                progenyDepth={12}
+                singleParentEmptyCard={false}
+                cardXSpacing={200}
+                cardYSpacing={90}
+                balanceSpouses={true}
+                hostClassName="family-chart-host family-chart-host--relation"
+              />
+            </>
+          ) : null}
         </section>
       ) : null}
     </main>

@@ -280,6 +280,46 @@ button[type='submit'] {
   margin: 0;
 }
 
+.relation-path-steps {
+  list-style: none;
+  margin: 0.25rem 0 0.75rem;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.15rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 253, 248, 0.7);
+}
+
+.relation-path-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.relation-path-steps__arrow {
+  margin-right: 0.2rem;
+  color: var(--muted, #6b7280);
+}
+
+.relation-path-steps__person {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.relation-path-steps__person:hover {
+  background: rgba(15, 118, 110, 0.1);
+}
+
 .person-search {
   display: grid;
   gap: 0.5rem;
