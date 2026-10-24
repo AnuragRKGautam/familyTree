@@ -4,6 +4,7 @@ import {
   createFamilyChartAdapter,
   type FamilyChartAdapter,
   type FamilyChartAdapterOptions,
+  type TreePosition,
 } from '../chart/familyChartAdapter'
 
 interface FamilyChartViewProps {
@@ -17,6 +18,7 @@ interface FamilyChartViewProps {
   cardXSpacing?: number
   cardYSpacing?: number
   balanceSpouses?: boolean
+  treePosition?: TreePosition
   hostClassName?: string
 }
 
@@ -31,12 +33,12 @@ export function FamilyChartView({
   cardXSpacing,
   cardYSpacing,
   balanceSpouses,
+  treePosition = 'main_to_middle',
   hostClassName = 'family-chart-host',
 }: FamilyChartViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const adapterRef = useRef<FamilyChartAdapter | null>(null)
   const onClickRef = useRef(onPersonClick)
-  const initialMainRef = useRef(mainId)
   const optionsRef = useRef({
     cardDisplay,
     ancestryDepth,
@@ -45,6 +47,8 @@ export function FamilyChartView({
     cardXSpacing,
     cardYSpacing,
     balanceSpouses,
+    treePosition,
+    mainId,
   })
 
   useEffect(() => {
@@ -60,6 +64,8 @@ export function FamilyChartView({
       cardXSpacing,
       cardYSpacing,
       balanceSpouses,
+      treePosition,
+      mainId,
     }
   }, [
     cardDisplay,
@@ -69,6 +75,8 @@ export function FamilyChartView({
     cardXSpacing,
     cardYSpacing,
     balanceSpouses,
+    treePosition,
+    mainId,
   ])
 
   useEffect(() => {
@@ -79,7 +87,7 @@ export function FamilyChartView({
     const adapterOptions: FamilyChartAdapterOptions = {
       container: el,
       data,
-      mainId: initialMainRef.current ?? undefined,
+      mainId: opts.mainId ?? undefined,
       onCardClick: (id) => onClickRef.current(id),
       cardDisplay: opts.cardDisplay,
       ancestryDepth: opts.ancestryDepth,
@@ -88,6 +96,7 @@ export function FamilyChartView({
       cardXSpacing: opts.cardXSpacing,
       cardYSpacing: opts.cardYSpacing,
       balanceSpouses: opts.balanceSpouses,
+      treePosition: opts.treePosition,
     }
 
     adapterRef.current?.destroy()
@@ -97,11 +106,14 @@ export function FamilyChartView({
       adapterRef.current?.destroy()
       adapterRef.current = null
     }
-  }, [data])
+  }, [data, treePosition])
 
   useEffect(() => {
-    if (mainId) adapterRef.current?.focusPerson(mainId)
-  }, [mainId, data])
+    // For fit / fit_top the adapter already placed the tree; re-focusing with
+    // main_to_middle would shove the root into the vertical center.
+    if (!mainId || treePosition === 'fit' || treePosition === 'fit_top') return
+    adapterRef.current?.focusPerson(mainId)
+  }, [mainId, data, treePosition])
 
   if (data.length === 0) {
     return null

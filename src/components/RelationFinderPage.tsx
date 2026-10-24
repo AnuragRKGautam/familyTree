@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { Data } from 'family-chart'
 import { loadTreePayload, listPartnerships, listPeople } from '../data/people'
@@ -26,6 +26,7 @@ export function RelationFinderPage() {
   const [pathIds, setPathIds] = useState<string[] | null>(null)
   const [chartRootId, setChartRootId] = useState<string | null>(null)
   const [resultError, setResultError] = useState<string | null>(null)
+  const pathSectionRef = useRef<HTMLElement | null>(null)
 
   const spouseNamesByPersonId = useMemo(
     () => buildSpouseNamesByPersonId(people, partnerships),
@@ -33,6 +34,11 @@ export function RelationFinderPage() {
   )
 
   const peopleById = useMemo(() => new Map(people.map((p) => [p.id, p])), [people])
+
+  useEffect(() => {
+    if (!pathIds || pathIds.length === 0) return
+    pathSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [pathIds])
 
   useEffect(() => {
     let cancelled = false
@@ -166,7 +172,11 @@ export function RelationFinderPage() {
       ) : null}
 
       {pathIds && pathIds.length > 0 ? (
-        <section className="relation-path-chart" aria-label="Relation path chart">
+        <section
+          ref={pathSectionRef}
+          className="relation-path-chart"
+          aria-label="Relation path chart"
+        >
           <h2>Connection path</h2>
           <ol className="relation-path-steps">
             {pathIds.map((id, index) => (
@@ -201,6 +211,7 @@ export function RelationFinderPage() {
                 cardXSpacing={200}
                 cardYSpacing={90}
                 balanceSpouses={true}
+                treePosition="fit_top"
                 hostClassName="family-chart-host family-chart-host--relation"
               />
             </>

@@ -274,6 +274,7 @@ button[type='submit'] {
   margin-top: 1.5rem;
   display: grid;
   gap: 0.5rem;
+  scroll-margin-top: 1rem;
 }
 
 .relation-path-chart h2 {
