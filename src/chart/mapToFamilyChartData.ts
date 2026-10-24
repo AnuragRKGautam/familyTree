@@ -1,5 +1,5 @@
 import type { Data } from 'family-chart'
-import type { TreePayload } from '../types/domain'
+import type { ParentChild, TreePayload } from '../types/domain'
 import { compareBirthdays } from './sortChildrenByBirthday'
 
 type GenderCode = 'M' | 'F'
@@ -9,10 +9,32 @@ function toChartGender(gender: string): GenderCode {
   return 'M'
 }
 
+/** Compare two children under the same parent: manual sort_order, then birthday, then id. */
+export function compareChildrenForParent(
+  aId: string,
+  bId: string,
+  parentId: string,
+  edges: ParentChild[],
+  birthdayById: Map<string, string>,
+): number {
+  const edgeA = edges.find((e) => e.parent_id === parentId && e.child_id === aId)
+  const edgeB = edges.find((e) => e.parent_id === parentId && e.child_id === bId)
+  const orderA = edgeA?.sort_order
+  const orderB = edgeB?.sort_order
+  const aHas = typeof orderA === 'number'
+  const bHas = typeof orderB === 'number'
+  if (aHas && bHas && orderA !== orderB) return (orderA as number) - (orderB as number)
+  if (aHas && !bHas) return -1
+  if (!aHas && bHas) return 1
+  const byDate = compareBirthdays(birthdayById.get(aId), birthdayById.get(bId))
+  if (byDate !== 0) return byDate
+  return aId.localeCompare(bId)
+}
+
 /**
  * Maps app domain rows into the documented family-chart Data format.
  * Relationships are written bidirectionally as required by the library docs.
- * Each parent's children list is ordered oldest → youngest by birth date.
+ * Each parent's children list is ordered by sort_order, then oldest → youngest.
  */
 export function mapToFamilyChartData(payload: TreePayload): Data {
   const byId = new Map(
@@ -33,6 +55,10 @@ export function mapToFamilyChartData(payload: TreePayload): Data {
         },
       },
     ]),
+  )
+
+  const birthdayById = new Map(
+    payload.people.map((p) => [p.id, p.birth_date ?? ''] as const),
   )
 
   for (const edge of payload.parentChildren) {
@@ -61,13 +87,9 @@ export function mapToFamilyChartData(payload: TreePayload): Data {
 
   for (const person of byId.values()) {
     if (person.rels.children.length < 2) continue
-    person.rels.children.sort((aId, bId) => {
-      const a = byId.get(aId)
-      const b = byId.get(bId)
-      const byDate = compareBirthdays(a?.data.birthday, b?.data.birthday)
-      if (byDate !== 0) return byDate
-      return aId.localeCompare(bId)
-    })
+    person.rels.children.sort((aId, bId) =>
+      compareChildrenForParent(aId, bId, person.id, payload.parentChildren, birthdayById),
+    )
   }
 
   return [...byId.values()] as Data

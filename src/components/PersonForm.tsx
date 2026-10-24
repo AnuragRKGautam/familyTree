@@ -10,6 +10,7 @@ import {
   listPeople,
   removeParentChild,
   removePartnership,
+  reorderChildren,
   updatePerson,
 } from '../data/people'
 import { buildSpouseNamesByPersonId, formatPersonPickerLabel } from '../data/personLabels'
@@ -19,6 +20,7 @@ import type { Gender, Partnership, Person, PersonWriteInput } from '../types/dom
 import { useAuth } from '../app/useAuth'
 import { StatusMessage } from './StatusMessage'
 import { PersonSearchSelect } from './PersonSearchSelect'
+import { ChildrenOrderList } from './ChildrenOrderList'
 
 const emptyForm: PersonWriteInput = {
   first_name: '',
@@ -619,27 +621,52 @@ export function PersonForm() {
               </ul>
             </div>
 
-            <RelationBlock
-              title="Children"
-              hint="Search and link children."
-              selectValue={linkChildId}
-              onSelectChange={setLinkChildId}
-              options={otherPeople}
-              excludeIds={[...childIds]}
-              linkedIds={childIds}
-              linkLabel="Link child"
-              onLink={() => void linkChild()}
-              onRemove={(id) =>
-                void withLinkError(async () => {
+            <div className="relation-group">
+              <h3>Children</h3>
+              <p className="muted small">
+                Search and link children. Drag to set left→right order on the tree (useful when birth
+                dates are missing).
+              </p>
+              <div className="relation-row">
+                <PersonSearchSelect
+                  people={otherPeople}
+                  value={linkChildId}
+                  onChange={setLinkChildId}
+                  excludeIds={[...childIds]}
+                  disabled={linking || otherPeople.length === 0}
+                  placeholder="Search children…"
+                  spouseNamesByPersonId={spouseNamesByPersonId}
+                />
+                <button
+                  type="button"
+                  disabled={!linkChildId || linking}
+                  onClick={() => void linkChild()}
+                >
+                  Link child
+                </button>
+              </div>
+              <ChildrenOrderList
+                childIds={childIds}
+                personLabel={personLabel}
+                birthDateLabel={(id) => people.find((p) => p.id === id)?.birth_date ?? null}
+                disabled={linking}
+                onReorder={async (orderedIds) => {
                   if (!personId) return
-                  await removeParentChild(personId, id)
-                  await refreshRelations(personId)
-                })
-              }
-              personLabel={personLabel}
-              linking={linking}
-              spouseNamesByPersonId={spouseNamesByPersonId}
-            />
+                  await withLinkError(async () => {
+                    await reorderChildren(personId, orderedIds)
+                    setChildIds(orderedIds)
+                    setNotice('Child order saved. Reload the tree to see the new left-to-right order.')
+                  })
+                }}
+                onRemove={(id) =>
+                  void withLinkError(async () => {
+                    if (!personId) return
+                    await removeParentChild(personId, id)
+                    await refreshRelations(personId)
+                  })
+                }
+              />
+            </div>
 
             <div className="relation-group">
               <h3>Siblings</h3>

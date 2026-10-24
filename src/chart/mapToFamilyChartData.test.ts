@@ -44,8 +44,8 @@ const sample: TreePayload = {
   aliases: [],
   partnerships: [{ id: 'r1', person_a_id: 'p1', person_b_id: 'p2' }],
   parentChildren: [
-    { id: 'e1', parent_id: 'p1', child_id: 'c1' },
-    { id: 'e2', parent_id: 'p2', child_id: 'c1' },
+    { id: 'e1', parent_id: 'p1', child_id: 'c1', sort_order: null },
+    { id: 'e2', parent_id: 'p2', child_id: 'c1', sort_order: null },
   ],
 }
 

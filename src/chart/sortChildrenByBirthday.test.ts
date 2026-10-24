@@ -84,12 +84,63 @@ describe('mapToFamilyChartData child order', () => {
       aliases: [],
       partnerships: [],
       parentChildren: [
-        { id: 'e1', parent_id: 'parent', child_id: 'young' },
-        { id: 'e2', parent_id: 'parent', child_id: 'old' },
+        { id: 'e1', parent_id: 'parent', child_id: 'young', sort_order: null },
+        { id: 'e2', parent_id: 'parent', child_id: 'old', sort_order: null },
       ],
     }
     const data = mapToFamilyChartData(payload)
     const parent = data.find((d) => d.id === 'parent')
     expect(parent?.rels.children).toEqual(['old', 'young'])
+  })
+
+  it('prefers manual sort_order over birth date', () => {
+    const payload: TreePayload = {
+      people: [
+        {
+          id: 'parent',
+          first_name: 'Parent',
+          last_name: 'Test',
+          gender: 'M',
+          birth_date: '1960-01-01',
+          death_date: null,
+          biography: null,
+          photo_path: null,
+          created_at: '',
+          updated_at: '',
+        },
+        {
+          id: 'young',
+          first_name: 'Young',
+          last_name: 'Test',
+          gender: 'F',
+          birth_date: '2001-05-01',
+          death_date: null,
+          biography: null,
+          photo_path: null,
+          created_at: '',
+          updated_at: '',
+        },
+        {
+          id: 'old',
+          first_name: 'Old',
+          last_name: 'Test',
+          gender: 'M',
+          birth_date: '1995-02-01',
+          death_date: null,
+          biography: null,
+          photo_path: null,
+          created_at: '',
+          updated_at: '',
+        },
+      ],
+      aliases: [],
+      partnerships: [],
+      parentChildren: [
+        { id: 'e1', parent_id: 'parent', child_id: 'young', sort_order: 0 },
+        { id: 'e2', parent_id: 'parent', child_id: 'old', sort_order: 1 },
+      ],
+    }
+    const data = mapToFamilyChartData(payload)
+    expect(data.find((d) => d.id === 'parent')?.rels.children).toEqual(['young', 'old'])
   })
 })

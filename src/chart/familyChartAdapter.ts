@@ -3,7 +3,10 @@ import * as f3 from 'family-chart'
 import type { Chart, Data, TreeDatum } from 'family-chart'
 import 'family-chart/styles/family-chart.css'
 import { balanceMultipleSpouses, type ChartTree } from './balanceMultipleSpouses'
-import { sortChildrenByBirthday } from './sortChildrenByBirthday'
+import {
+  createSortChildrenFromData,
+  orderHierarchyChildrenByBirth,
+} from './sortChildrenByBirthday'
 
 export type TreePosition = 'fit' | 'main_to_middle' | 'fit_top'
 
@@ -105,8 +108,26 @@ export function createFamilyChartAdapter(options: FamilyChartAdapterOptions): Fa
 
   chart.setAncestryDepth(ancestryDepth).setProgenyDepth(progenyDepth)
   chart.setSingleParentEmptyCard(singleParentEmptyCard, { label: 'Unknown parent' })
-  // Left → right: oldest sibling first, youngest last (by birthday).
-  chart.setSortChildrenFunction(sortChildrenByBirthday)
+  let currentData = data
+
+  function applyChildOrdering(nextData: Data) {
+    chart.setSortChildrenFunction(createSortChildrenFromData(nextData))
+    chart.setModifyTreeHierarchy((root, isAncestry) => {
+      orderHierarchyChildrenByBirth(
+        root as {
+          data: Data[number]
+          children?: Array<{ data: Data[number]; children?: unknown }> | null
+        },
+        nextData,
+        isAncestry,
+      )
+    })
+  }
+
+  chart.setAncestryDepth(ancestryDepth).setProgenyDepth(progenyDepth)
+  chart.setSingleParentEmptyCard(singleParentEmptyCard, { label: 'Unknown parent' })
+  // Left → right: manual sort_order, then oldest → youngest by birthday.
+  applyChildOrdering(currentData)
   if (typeof cardXSpacing === 'number') chart.setCardXSpacing(cardXSpacing)
   if (typeof cardYSpacing === 'number') chart.setCardYSpacing(cardYSpacing)
 
@@ -126,7 +147,6 @@ export function createFamilyChartAdapter(options: FamilyChartAdapterOptions): Fa
     }
   }
 
-  let currentData = data
   const initialMain =
     mainId && currentData.some((d) => d.id === mainId) ? mainId : currentData[0]?.id
   if (initialMain) {
@@ -152,6 +172,7 @@ export function createFamilyChartAdapter(options: FamilyChartAdapterOptions): Fa
     },
     updateData(nextData: Data, nextMainId?: string) {
       currentData = nextData
+      applyChildOrdering(nextData)
       chart.updateData(nextData)
       const focus =
         nextMainId && nextData.some((d) => d.id === nextMainId)

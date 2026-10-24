@@ -41,6 +41,8 @@ export interface ParentChild {
   id: string
   parent_id: string
   child_id: string
+  /** Manual left→right order under this parent; null = use birth date. */
+  sort_order: number | null
 }
 
 export interface PersonSearchResult {

@@ -6,6 +6,7 @@ import { SignUpPage } from './components/SignUpPage'
 import { StatusMessage } from './components/StatusMessage'
 import { TreePage } from './components/TreePage'
 import { PersonForm } from './components/PersonForm'
+import { AddFamilyPage } from './components/AddFamilyPage'
 import { AdminProfiles } from './components/AdminProfiles'
 import { PersonProfilePage } from './components/PersonProfilePage'
 import { RelationFinderPage } from './components/RelationFinderPage'
@@ -118,6 +119,7 @@ export default function App() {
 
           <Route element={<AuthedLayout />}>
             <Route path="/people/new" element={<PersonNewPage />} />
+            <Route path="/people/add-family" element={<AddFamilyPage />} />
             <Route path="/people/:personId/edit" element={<PersonEditPage />} />
             <Route path="/admin/profiles" element={<AdminProfiles />} />
           </Route>

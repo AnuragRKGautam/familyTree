@@ -68,13 +68,33 @@ export async function getPerson(id: string): Promise<PersonWithRelations | null>
   const [aliasesRes, parentsRes, childrenRes, partnersA, partnersB] = await Promise.all([
     supabase.from('person_aliases').select('alias').eq('person_id', id),
     supabase.from('parent_child').select('parent_id').eq('child_id', id),
-    supabase.from('parent_child').select('child_id').eq('parent_id', id),
+    supabase.from('parent_child').select('child_id, sort_order').eq('parent_id', id),
     supabase.from('partnerships').select('person_b_id').eq('person_a_id', id),
     supabase.from('partnerships').select('person_a_id').eq('person_b_id', id),
   ])
 
-  for (const res of [aliasesRes, parentsRes, childrenRes, partnersA, partnersB]) {
+  for (const res of [aliasesRes, parentsRes, partnersA, partnersB]) {
     if (res.error) throw toDataAccessError(res.error, 'Failed to load relationships')
+  }
+
+  let childRows: Array<{ child_id: string; sort_order: number | null }> = []
+  if (childrenRes.error) {
+    const basic = await supabase.from('parent_child').select('child_id').eq('parent_id', id)
+    if (basic.error) throw toDataAccessError(basic.error, 'Failed to load relationships')
+    childRows = (basic.data ?? []).map((r) => ({
+      child_id: r.child_id as string,
+      sort_order: null,
+    }))
+  } else {
+    childRows = (childrenRes.data ?? []).map((r) => ({
+      child_id: r.child_id as string,
+      sort_order:
+        typeof r.sort_order === 'number'
+          ? r.sort_order
+          : r.sort_order == null
+            ? null
+            : Number(r.sort_order),
+    }))
   }
 
   const partner_ids = [
@@ -82,7 +102,39 @@ export async function getPerson(id: string): Promise<PersonWithRelations | null>
     ...(partnersB.data ?? []).map((r) => r.person_a_id as string),
   ]
   const parent_ids = (parentsRes.data ?? []).map((r) => r.parent_id as string)
-  const child_ids = (childrenRes.data ?? []).map((r) => r.child_id as string)
+
+  // Order children: sort_order, then birth date (loaded below if needed).
+  const childIdSet = childRows.map((r) => r.child_id)
+  let birthByChild = new Map<string, string>()
+  if (childIdSet.length > 0) {
+    const { data: childPeople } = await supabase
+      .from('people')
+      .select('id, birth_date')
+      .in('id', childIdSet)
+    birthByChild = new Map(
+      (childPeople ?? []).map((p) => [p.id as string, (p.birth_date as string | null) ?? '']),
+    )
+  }
+  childRows.sort((a, b) => {
+    const aHas = typeof a.sort_order === 'number'
+    const bHas = typeof b.sort_order === 'number'
+    if (aHas && bHas && a.sort_order !== b.sort_order) {
+      return (a.sort_order as number) - (b.sort_order as number)
+    }
+    if (aHas && !bHas) return -1
+    if (!aHas && bHas) return 1
+    const byDate = (birthByChild.get(a.child_id) ?? '').localeCompare(
+      birthByChild.get(b.child_id) ?? '',
+    )
+    // Empty birth dates sort last
+    const aBirth = birthByChild.get(a.child_id) ?? ''
+    const bBirth = birthByChild.get(b.child_id) ?? ''
+    if (!aBirth && bBirth) return 1
+    if (aBirth && !bBirth) return -1
+    if (byDate !== 0) return byDate
+    return a.child_id.localeCompare(b.child_id)
+  })
+  const child_ids = childRows.map((r) => r.child_id)
   const sibling_ids = await listSiblingIds(id, parent_ids)
 
   return {
@@ -197,10 +249,10 @@ export async function loadTreePayload(): Promise<TreePayload> {
     supabase.from('people').select(columns),
     supabase.from('person_aliases').select('id, person_id, alias'),
     supabase.from('partnerships').select('id, person_a_id, person_b_id'),
-    supabase.from('parent_child').select('id, parent_id, child_id'),
+    loadParentChildRows(),
   ])
 
-  for (const res of [peopleRes, aliasesRes, partnershipsRes, parentChildRes]) {
+  for (const res of [peopleRes, aliasesRes, partnershipsRes]) {
     if (res.error) {
       if (res.error.code === '42501' || res.error.message.toLowerCase().includes('policy')) {
         throw new DataAccessError('Permission denied', 'permission_denied')
@@ -215,8 +267,41 @@ export async function loadTreePayload(): Promise<TreePayload> {
     ),
     aliases: (aliasesRes.data ?? []) as PersonAlias[],
     partnerships: (partnershipsRes.data ?? []) as Partnership[],
-    parentChildren: (parentChildRes.data ?? []) as ParentChild[],
+    parentChildren: parentChildRes,
   }
+}
+
+async function loadParentChildRows(): Promise<ParentChild[]> {
+  const withOrder = await supabase
+    .from('parent_child')
+    .select('id, parent_id, child_id, sort_order')
+  if (!withOrder.error) {
+    return (withOrder.data ?? []).map((row) => ({
+      id: row.id as string,
+      parent_id: row.parent_id as string,
+      child_id: row.child_id as string,
+      sort_order:
+        typeof row.sort_order === 'number'
+          ? row.sort_order
+          : row.sort_order == null
+            ? null
+            : Number(row.sort_order),
+    }))
+  }
+  // Migration not applied yet — fall back without sort_order.
+  const basic = await supabase.from('parent_child').select('id, parent_id, child_id')
+  if (basic.error) {
+    if (basic.error.code === '42501' || basic.error.message.toLowerCase().includes('policy')) {
+      throw new DataAccessError('Permission denied', 'permission_denied')
+    }
+    throw toDataAccessError(basic.error, 'Failed to load family tree')
+  }
+  return (basic.data ?? []).map((row) => ({
+    id: row.id as string,
+    parent_id: row.parent_id as string,
+    child_id: row.child_id as string,
+    sort_order: null,
+  }))
 }
 
 async function replaceAliases(personId: string, aliases: string[]): Promise<void> {
@@ -307,15 +392,46 @@ export async function setPersonPhotoPath(personId: string, photoPath: string | n
   }
 }
 
-export async function addParentChild(parentId: string, childId: string): Promise<void> {
+export async function addParentChild(
+  parentId: string,
+  childId: string,
+  sortOrder?: number,
+): Promise<void> {
   if (parentId === childId) {
     throw new DataAccessError('A person cannot be their own parent')
   }
-  const { error } = await supabase.from('parent_child').insert({
+
+  let resolvedOrder = sortOrder
+  if (typeof resolvedOrder !== 'number') {
+    const { data: existing, error: existingError } = await supabase
+      .from('parent_child')
+      .select('sort_order')
+      .eq('parent_id', parentId)
+    if (!existingError) {
+      const maxOrder = (existing ?? []).reduce((max, row) => {
+        const n = typeof row.sort_order === 'number' ? row.sort_order : -1
+        return Math.max(max, n)
+      }, -1)
+      resolvedOrder = maxOrder + 1
+    }
+  }
+
+  const row: { parent_id: string; child_id: string; sort_order?: number } = {
     parent_id: parentId,
     child_id: childId,
-  })
+  }
+  if (typeof resolvedOrder === 'number') row.sort_order = resolvedOrder
+
+  const { error } = await supabase.from('parent_child').insert(row)
   if (error) {
+    // Column may not exist yet — retry without sort_order.
+    if (typeof resolvedOrder === 'number') {
+      const retry = await supabase.from('parent_child').insert({
+        parent_id: parentId,
+        child_id: childId,
+      })
+      if (!retry.error) return
+    }
     if (error.code === '42501' || error.message.toLowerCase().includes('policy')) {
       throw new DataAccessError('Permission denied', 'permission_denied')
     }
@@ -330,6 +446,25 @@ export async function removeParentChild(parentId: string, childId: string): Prom
     .eq('parent_id', parentId)
     .eq('child_id', childId)
   if (error) throw toDataAccessError(error, 'Failed to unlink parent/child')
+}
+
+/** Persist left→right child order for a parent (0 = leftmost). */
+export async function reorderChildren(parentId: string, childIdsInOrder: string[]): Promise<void> {
+  for (let i = 0; i < childIdsInOrder.length; i++) {
+    const childId = childIdsInOrder[i]
+    if (!childId) continue
+    const { error } = await supabase
+      .from('parent_child')
+      .update({ sort_order: i })
+      .eq('parent_id', parentId)
+      .eq('child_id', childId)
+    if (error) {
+      if (error.code === '42501' || error.message.toLowerCase().includes('policy')) {
+        throw new DataAccessError('Permission denied', 'permission_denied')
+      }
+      throw toDataAccessError(error, 'Failed to save child order')
+    }
+  }
 }
 
 export async function addPartnership(personAId: string, personBId: string): Promise<void> {

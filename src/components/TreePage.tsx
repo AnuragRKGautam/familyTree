@@ -95,7 +95,10 @@ export function TreePage() {
         <nav className="topbar-nav">
           <Link to="/relation">Find relation</Link>
           {canEdit && (isAdmin || (accessScopeIds && accessScopeIds.size > 0)) ? (
-            <Link to="/people/new">Add person</Link>
+            <>
+              <Link to="/people/new">Add person</Link>
+              <Link to="/people/add-family">Add family</Link>
+            </>
           ) : null}
           {isAdmin ? <Link to="/admin/profiles">Users & access</Link> : null}
           {isLoggedIn ? (

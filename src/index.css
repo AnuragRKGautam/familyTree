@@ -406,6 +406,127 @@ button[type='submit'] {
   background: #fff;
 }
 
+.children-order {
+  margin-top: 0.75rem;
+}
+
+.children-order-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.children-order-item {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 248, 0.85);
+  cursor: grab;
+}
+
+.children-order-item.is-dragging {
+  opacity: 0.55;
+}
+
+.children-order-handle {
+  color: var(--muted, #6b7280);
+  letter-spacing: -0.15em;
+  user-select: none;
+}
+
+.children-order-index {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted, #6b7280);
+  font-size: 0.9rem;
+}
+
+.children-order-actions {
+  display: inline-flex;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.add-family-page .lede {
+  max-width: 40rem;
+}
+
+.add-family-form {
+  display: grid;
+  gap: 1.75rem;
+  margin-top: 1.25rem;
+  max-width: 48rem;
+}
+
+.add-family-form h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.form-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.form-grid label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.92rem;
+}
+
+.form-grid input,
+.form-grid select {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  background: #fff;
+  font: inherit;
+}
+
+.family-child-rows {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.family-child-row {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  background: rgba(255, 253, 248, 0.7);
+  display: grid;
+  gap: 0.75rem;
+}
+
+.family-child-row__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.add-family-review {
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.add-family-partial {
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(180, 83, 9, 0.08);
+}
+
+.add-family-partial ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+}
+
 .partner-share-children {
   display: grid;
   gap: 0.4rem;
