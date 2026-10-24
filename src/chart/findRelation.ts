@@ -6,22 +6,25 @@ export interface RelationFindResult {
   kinshipLabel: string | null
   /** Subset of chart data connecting A and B for a small path chart. */
   pathData: Data | null
+  /** Focus/root person for the path chart (usually the common ancestor). */
+  chartRootId: string | null
 }
 
-type KinshipDatum = Datum & { kinship?: string }
+type EdgeKind = 'parent' | 'child' | 'spouse'
 
 /**
- * Uses family-chart's documented kinship helpers to label B relative to A
- * and build a minimal tree showing how they connect.
+ * Label B relative to A, and build a path chart rooted at the connecting
+ * ancestor so *both* sides of the relation are visible.
  */
 export function findRelationBetween(data: Data, fromId: string, toId: string): RelationFindResult {
   const clean = sanitizeChartData(data)
 
   if (fromId === toId) {
     const self = clean.find((d) => d.id === fromId)
-    if (!self) return { kinshipLabel: null, pathData: null }
+    if (!self) return { kinshipLabel: null, pathData: null, chartRootId: null }
     return {
       kinshipLabel: 'self',
+      chartRootId: fromId,
       pathData: [
         {
           ...self,
@@ -32,11 +35,11 @@ export function findRelationBetween(data: Data, fromId: string, toId: string): R
   }
 
   if (!clean.some((d) => d.id === fromId) || !clean.some((d) => d.id === toId)) {
-    return { kinshipLabel: null, pathData: null }
+    return { kinshipLabel: null, pathData: null, chartRootId: null }
   }
 
   let kinshipLabel: string | null = null
-  let pathData: Data | null = null
+  let kinshipMap: Record<string, string> = {}
 
   const host = document.createElement('div')
   host.setAttribute('aria-hidden', 'true')
@@ -47,39 +50,38 @@ export function findRelationBetween(data: Data, fromId: string, toId: string): R
   try {
     const chart = f3.createChart(host, structuredClone(clean) as Data)
     try {
-      const kinships = chart.calculateKinships(fromId, { show_in_law: true })
-      const rawLabel = kinships[toId] ?? null
+      kinshipMap = chart.calculateKinships(fromId, { show_in_law: true })
+      const rawLabel = kinshipMap[toId] ?? null
       if (rawLabel) kinshipLabel = formatKinshipLabel(rawLabel)
     } catch {
+      kinshipMap = {}
       kinshipLabel = null
-    }
-
-    if (kinshipLabel) {
-      try {
-        const stash = chart.getKinshipsDataStash(fromId, toId) as KinshipDatum[] | void
-        if (stash && stash.length > 0) {
-          pathData = normalizeKinshipStash(stash, fromId)
-        }
-      } catch {
-        pathData = null
-      }
     }
   } finally {
     host.remove()
   }
 
-  // Fallback path chart (and label if the library kinship walk crashed).
-  if (!pathData) {
-    const pathIds = findShortestRelationPath(clean, fromId, toId)
-    if (pathIds && pathIds.length > 0) {
-      if (!kinshipLabel) {
-        kinshipLabel = describePathFallback(pathIds.length)
-      }
-      pathData = buildPathChartData(clean, pathIds, fromId, kinshipLabel)
-    }
+  const pathIds = findShortestRelationPath(clean, fromId, toId)
+  if (!pathIds || pathIds.length === 0) {
+    return { kinshipLabel, pathData: null, chartRootId: null }
   }
 
-  return { kinshipLabel, pathData }
+  if (!kinshipLabel) {
+    kinshipLabel = describePathFallback(pathIds.length)
+  }
+
+  const peakId = findPeakOnPath(clean, pathIds)
+  const pathData = buildDualBranchPathChart(
+    clean,
+    pathIds,
+    fromId,
+    toId,
+    peakId,
+    kinshipLabel,
+    kinshipMap,
+  )
+
+  return { kinshipLabel, pathData, chartRootId: peakId }
 }
 
 /** Drop dangling parent/spouse/child ids that crash family-chart kinship walks. */
@@ -95,28 +97,6 @@ export function sanitizeChartData(data: Data): Data {
     },
   })) as Data
 }
-
-function normalizeKinshipStash(stash: KinshipDatum[], fromId: string): Data {
-  const ids = new Set(stash.map((d) => d.id).filter(Boolean))
-  return stash
-    .filter((d) => d && d.id && d.data)
-    .map((d) => ({
-      id: d.id,
-      data: {
-        ...d.data,
-        kinship: formatKinshipLabel(
-          d.kinship ?? (d.id === fromId ? 'self' : ''),
-        ),
-      },
-      rels: {
-        parents: [...(d.rels?.parents ?? [])].filter((id) => ids.has(id)),
-        spouses: [...(d.rels?.spouses ?? [])].filter((id) => ids.has(id)),
-        children: [...(d.rels?.children ?? [])].filter((id) => ids.has(id)),
-      },
-    })) as Data
-}
-
-type EdgeKind = 'parent' | 'child' | 'spouse'
 
 /** Shortest path over parent/child/spouse edges. */
 export function findShortestRelationPath(
@@ -172,10 +152,176 @@ function reconstructPath(
 }
 
 /**
- * Build a small chart from a path of ids. Uses real parent/spouse links where
- * present so family-chart can lay out the connection.
+ * Peak / common-ancestor index on a path: last node reached while still
+ * moving to a parent (or across a spouse), before descending to children.
  */
+export function findPeakOnPath(data: Data, pathIds: string[]): string {
+  if (pathIds.length === 0) return ''
+  const first = pathIds[0]
+  if (pathIds.length === 1 || first === undefined) return first ?? ''
+
+  const byId = new Map(data.map((d) => [d.id, d]))
+  let peakIndex = 0
+
+  for (let i = 0; i < pathIds.length - 1; i++) {
+    const fromId = pathIds[i]
+    const nextId = pathIds[i + 1]
+    if (fromId === undefined || nextId === undefined) break
+    const from = byId.get(fromId)
+    if (!from) break
+
+    const goingUp = (from.rels.parents ?? []).includes(nextId)
+    const goingDown = (from.rels.children ?? []).includes(nextId)
+    const viaSpouse = (from.rels.spouses ?? []).includes(nextId)
+
+    if (goingUp || viaSpouse) {
+      peakIndex = i + 1
+      continue
+    }
+    if (goingDown) {
+      // Started descending — peak is the current node.
+      break
+    }
+    // Unknown edge type: keep advancing the peak.
+    peakIndex = i + 1
+  }
+
+  return pathIds[peakIndex] ?? first
+}
+
+/**
+ * Build a chart rooted at the path peak with both branches as descendants,
+ * so cousins (etc.) appear on opposite sides under the shared ancestor.
+ */
+export function buildDualBranchPathChart(
+  data: Data,
+  pathIds: string[],
+  fromId: string,
+  toId: string,
+  peakId: string,
+  toKinshipLabel: string | null,
+  kinshipMap: Record<string, string> = {},
+): Data {
+  const byId = new Map(data.map((d) => [d.id, d]))
+  const peakIdx = pathIds.indexOf(peakId)
+  if (peakIdx < 0) {
+    return buildPathChartDataLegacy(data, pathIds, fromId, toKinshipLabel)
+  }
+
+  // [peak, …, fromId] and [peak, …, toId]
+  const chainFrom = pathIds.slice(0, peakIdx + 1).reverse()
+  const chainTo = pathIds.slice(peakIdx)
+
+  const nodes = new Map<string, Datum>()
+
+  function labelFor(id: string): string {
+    if (id === fromId) return 'Self'
+    if (id === toId && toKinshipLabel) return toKinshipLabel
+    if (id === peakId && id !== fromId && id !== toId) {
+      const fromMap = kinshipMap[id]
+      return fromMap ? formatKinshipLabel(fromMap) : 'Common ancestor'
+    }
+    const fromMap = kinshipMap[id]
+    if (fromMap) return formatKinshipLabel(fromMap)
+    return 'Relative'
+  }
+
+  function ensure(id: string): Datum {
+    const existing = nodes.get(id)
+    if (existing) return existing
+    const src = byId.get(id)
+    const node: Datum = src
+      ? {
+          id,
+          data: { ...src.data, kinship: labelFor(id) },
+          rels: { parents: [], spouses: [], children: [] },
+        }
+      : {
+          id,
+          data: {
+            gender: 'M',
+            'first name': '?',
+            'last name': '',
+            birthday: '',
+            kinship: labelFor(id),
+          },
+          rels: { parents: [], spouses: [], children: [] },
+        }
+    nodes.set(id, node)
+    return node
+  }
+
+  function edgeKind(aId: string, bId: string): EdgeKind | null {
+    const a = byId.get(aId)
+    if (!a) return null
+    if ((a.rels.parents ?? []).includes(bId)) return 'parent'
+    if ((a.rels.children ?? []).includes(bId)) return 'child'
+    if ((a.rels.spouses ?? []).includes(bId)) return 'spouse'
+    return null
+  }
+
+  /** Wire chain[i] → chain[i+1] using real edge direction when possible. */
+  function wireChain(chain: string[]) {
+    for (let i = 0; i < chain.length - 1; i++) {
+      const aId = chain[i]
+      const bId = chain[i + 1]
+      if (aId === undefined || bId === undefined) continue
+      const a = ensure(aId)
+      const b = ensure(bId)
+      const kind = edgeKind(aId, bId)
+      const spousesA = a.rels.spouses ?? (a.rels.spouses = [])
+      const spousesB = b.rels.spouses ?? (b.rels.spouses = [])
+      const childrenA = a.rels.children ?? (a.rels.children = [])
+      const childrenB = b.rels.children ?? (b.rels.children = [])
+      const parentsA = a.rels.parents ?? (a.rels.parents = [])
+      const parentsB = b.rels.parents ?? (b.rels.parents = [])
+
+      if (kind === 'spouse' || (!kind && edgeKind(bId, aId) === 'spouse')) {
+        if (!spousesA.includes(bId)) spousesA.push(bId)
+        if (!spousesB.includes(aId)) spousesB.push(aId)
+        continue
+      }
+
+      // Default: earlier in chain-from-peak is parent of later (descending).
+      if (kind === 'parent') {
+        // a's parent is b — invert for descending tree from peak
+        if (!childrenB.includes(aId)) childrenB.push(aId)
+        if (!parentsA.includes(bId)) parentsA.push(bId)
+      } else {
+        // child edge or unknown: a parent of b
+        if (!childrenA.includes(bId)) childrenA.push(bId)
+        if (!parentsB.includes(aId)) parentsB.push(aId)
+      }
+    }
+  }
+
+  ensure(peakId)
+  wireChain(chainFrom)
+  wireChain(chainTo)
+
+  return [...nodes.values()] as Data
+}
+
+/** @deprecated kept for tests / emergency fallback */
 export function buildPathChartData(
+  data: Data,
+  pathIds: string[],
+  fromId: string,
+  toKinshipLabel: string | null,
+): Data {
+  const peakId = findPeakOnPath(data, pathIds)
+  return buildDualBranchPathChart(
+    data,
+    pathIds,
+    fromId,
+    pathIds[pathIds.length - 1] ?? fromId,
+    peakId,
+    toKinshipLabel,
+    {},
+  )
+}
+
+function buildPathChartDataLegacy(
   data: Data,
   pathIds: string[],
   fromId: string,
@@ -183,39 +329,27 @@ export function buildPathChartData(
 ): Data {
   const byId = new Map(data.map((d) => [d.id, d]))
   const pathSet = new Set(pathIds)
-  const nodes: Data = []
-
-  for (const id of pathIds) {
-    const src = byId.get(id)
-    if (!src) continue
-    const kinship =
-      id === fromId
-        ? 'Self'
-        : id === pathIds[pathIds.length - 1] && toKinshipLabel
-          ? toKinshipLabel
-          : pathRoleLabel(pathIds, id)
-
-    nodes.push({
-      id,
-      data: {
-        ...src.data,
-        kinship,
-      },
-      rels: {
-        parents: (src.rels.parents ?? []).filter((p) => pathSet.has(p)),
-        spouses: (src.rels.spouses ?? []).filter((s) => pathSet.has(s)),
-        children: (src.rels.children ?? []).filter((c) => pathSet.has(c)),
-      },
+  return pathIds
+    .map((id) => {
+      const src = byId.get(id)
+      if (!src) return null
+      const kinship =
+        id === fromId
+          ? 'Self'
+          : id === pathIds[pathIds.length - 1] && toKinshipLabel
+            ? toKinshipLabel
+            : 'Relative'
+      return {
+        id,
+        data: { ...src.data, kinship },
+        rels: {
+          parents: (src.rels.parents ?? []).filter((p) => pathSet.has(p)),
+          spouses: (src.rels.spouses ?? []).filter((s) => pathSet.has(s)),
+          children: (src.rels.children ?? []).filter((c) => pathSet.has(c)),
+        },
+      }
     })
-  }
-
-  return nodes
-}
-
-function pathRoleLabel(pathIds: string[], id: string): string {
-  const index = pathIds.indexOf(id)
-  if (index <= 0) return 'Self'
-  return `Step ${index}`
+    .filter(Boolean) as Data
 }
 
 function describePathFallback(pathLength: number): string {

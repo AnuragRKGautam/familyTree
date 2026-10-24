@@ -23,6 +23,7 @@ export function RelationFinderPage() {
   const [finding, setFinding] = useState(false)
   const [resultLabel, setResultLabel] = useState<string | null>(null)
   const [pathData, setPathData] = useState<Data | null>(null)
+  const [chartRootId, setChartRootId] = useState<string | null>(null)
   const [resultError, setResultError] = useState<string | null>(null)
 
   const spouseNamesByPersonId = useMemo(
@@ -64,6 +65,7 @@ export function RelationFinderPage() {
     setResultError(null)
     setResultLabel(null)
     setPathData(null)
+    setChartRootId(null)
     if (!fromId || !toId) {
       setResultError('Select both people.')
       return
@@ -75,6 +77,7 @@ export function RelationFinderPage() {
         const result = findRelationBetween(chartData, fromId, toId)
         setResultLabel(result.kinshipLabel)
         setPathData(result.pathData)
+        setChartRootId(result.chartRootId)
         if (!result.kinshipLabel && !result.pathData) {
           setResultError(relationSentence(nameOf(fromId), nameOf(toId), null))
         } else if (result.kinshipLabel && !result.pathData) {
@@ -95,6 +98,7 @@ export function RelationFinderPage() {
     setToId(fromId)
     setResultLabel(null)
     setPathData(null)
+    setChartRootId(null)
     setResultError(null)
   }
 
@@ -159,12 +163,13 @@ export function RelationFinderPage() {
         <section className="relation-path-chart" aria-label="Relation path chart">
           <h2>Connection path</h2>
           <p className="muted small">
-            Cards show the kinship of each person relative to {nameOf(fromId)}. Click a card to open
-            them on the main tree.
+            Rooted at the shared connection
+            {chartRootId ? ` (${nameOf(chartRootId)})` : ''}, with both sides of the relation.
+            Labels are relative to {nameOf(fromId)}. Click a card to open them on the main tree.
           </p>
           <FamilyChartView
             data={pathData}
-            mainId={fromId}
+            mainId={chartRootId ?? fromId}
             onPersonClick={(id) => navigate(`/tree/${id}`)}
             cardDisplay={[
               ['kinship'],
@@ -175,7 +180,7 @@ export function RelationFinderPage() {
             singleParentEmptyCard={false}
             cardXSpacing={200}
             cardYSpacing={90}
-            balanceSpouses={false}
+            balanceSpouses={true}
             hostClassName="family-chart-host family-chart-host--relation"
           />
         </section>
