@@ -67,4 +67,71 @@ describe('mapToFamilyChartData', () => {
   it('formats display names', () => {
     expect(displayName('Helen', 'Rivera')).toBe('Helen Rivera')
   })
+
+  it('caps three parents to one male and one female so the chart library does not crash', () => {
+    const payload: TreePayload = {
+      people: [
+        {
+          id: 'mom',
+          first_name: 'Mom',
+          last_name: 'A',
+          gender: 'F',
+          birth_date: null,
+          death_date: null,
+          biography: null,
+          photo_path: null,
+          created_at: '',
+          updated_at: '',
+        },
+        {
+          id: 'dad',
+          first_name: 'Dad',
+          last_name: 'A',
+          gender: 'M',
+          birth_date: null,
+          death_date: null,
+          biography: null,
+          photo_path: null,
+          created_at: '',
+          updated_at: '',
+        },
+        {
+          id: 'extra',
+          first_name: 'Extra',
+          last_name: 'A',
+          gender: 'M',
+          birth_date: null,
+          death_date: null,
+          biography: null,
+          photo_path: null,
+          created_at: '',
+          updated_at: '',
+        },
+        {
+          id: 'kid',
+          first_name: 'Kid',
+          last_name: 'A',
+          gender: 'M',
+          birth_date: null,
+          death_date: null,
+          biography: null,
+          photo_path: null,
+          created_at: '',
+          updated_at: '',
+        },
+      ],
+      aliases: [],
+      partnerships: [],
+      parentChildren: [
+        { id: 'e1', parent_id: 'mom', child_id: 'kid', sort_order: null },
+        { id: 'e2', parent_id: 'dad', child_id: 'kid', sort_order: null },
+        { id: 'e3', parent_id: 'extra', child_id: 'kid', sort_order: null },
+      ],
+    }
+    const data = mapToFamilyChartData(payload)
+    const kid = data.find((d) => d.id === 'kid')
+    expect(kid?.rels.parents).toEqual(expect.arrayContaining(['mom', 'dad']))
+    expect(kid?.rels.parents).toHaveLength(2)
+    expect(data.find((d) => d.id === 'extra')?.rels.children).not.toContain('kid')
+  })
 })

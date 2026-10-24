@@ -9,6 +9,21 @@ function toChartGender(gender: string): GenderCode {
   return 'M'
 }
 
+/**
+ * family-chart only supports two parents. Prefer one male + one female when
+ * present; otherwise keep the first two linked parents.
+ */
+function pickTwoParents(
+  parentIds: string[],
+  byId: Map<string, { data: { gender: GenderCode } }>,
+): string[] {
+  if (parentIds.length <= 2) return parentIds
+  const male = parentIds.find((id) => byId.get(id)?.data.gender === 'M')
+  const female = parentIds.find((id) => byId.get(id)?.data.gender === 'F')
+  if (male && female) return [male, female]
+  return parentIds.slice(0, 2)
+}
+
 /** Compare two children under the same parent: manual sort_order, then birthday, then id. */
 export function compareChildrenForParent(
   aId: string,
@@ -70,6 +85,20 @@ export function mapToFamilyChartData(payload: TreePayload): Data {
     }
     if (!child.rels.parents.includes(edge.parent_id)) {
       child.rels.parents.push(edge.parent_id)
+    }
+  }
+
+  // family-chart crashes if any child has more than two parents ("child has more
+  // than 1 parent" inside createRelsToAdd). Cap to two and drop extras from both sides.
+  for (const person of byId.values()) {
+    if (person.rels.parents.length <= 2) continue
+    const kept = pickTwoParents(person.rels.parents, byId)
+    const dropped = person.rels.parents.filter((id) => !kept.includes(id))
+    person.rels.parents = kept
+    for (const parentId of dropped) {
+      const parent = byId.get(parentId)
+      if (!parent) continue
+      parent.rels.children = parent.rels.children.filter((id) => id !== person.id)
     }
   }
 

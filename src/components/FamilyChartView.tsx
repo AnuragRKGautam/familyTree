@@ -100,7 +100,20 @@ export function FamilyChartView({
     }
 
     adapterRef.current?.destroy()
-    adapterRef.current = createFamilyChartAdapter(adapterOptions)
+    adapterRef.current = null
+    try {
+      adapterRef.current = createFamilyChartAdapter(adapterOptions)
+    } catch (err) {
+      console.error('Family chart failed to render', err)
+      el.replaceChildren()
+      const msg = document.createElement('p')
+      msg.className = 'muted'
+      msg.textContent =
+        err instanceof Error
+          ? `Could not draw the family chart: ${err.message}`
+          : 'Could not draw the family chart. Check parent links (each person can have at most two parents).'
+      el.appendChild(msg)
+    }
 
     return () => {
       adapterRef.current?.destroy()

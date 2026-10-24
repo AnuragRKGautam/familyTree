@@ -401,6 +401,19 @@ export async function addParentChild(
     throw new DataAccessError('A person cannot be their own parent')
   }
 
+  const { data: existingParents, error: parentsError } = await supabase
+    .from('parent_child')
+    .select('parent_id')
+    .eq('child_id', childId)
+  if (parentsError) throw toDataAccessError(parentsError, 'Failed to check existing parents')
+  const already = (existingParents ?? []).map((r) => r.parent_id as string)
+  if (already.includes(parentId)) return
+  if (already.length >= 2) {
+    throw new DataAccessError(
+      'This person already has two parents. Unlink one before adding another — the chart only supports two parents.',
+    )
+  }
+
   let resolvedOrder = sortOrder
   if (typeof resolvedOrder !== 'number') {
     const { data: existing, error: existingError } = await supabase

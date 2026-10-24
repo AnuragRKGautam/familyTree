@@ -154,7 +154,19 @@ export function createFamilyChartAdapter(options: FamilyChartAdapterOptions): Fa
   }
 
   const viewPosition = treePosition === 'fit_top' ? 'fit' : treePosition
-  chart.updateTree({ initial: true, tree_position: viewPosition })
+  try {
+    chart.updateTree({ initial: true, tree_position: viewPosition })
+  } catch (err) {
+    container.replaceChildren()
+    const msg = document.createElement('p')
+    msg.className = 'status-message status-message--error'
+    msg.textContent =
+      err instanceof Error
+        ? `Could not draw the family chart: ${err.message}`
+        : 'Could not draw the family chart.'
+    container.appendChild(msg)
+    throw err
+  }
   if (treePosition === 'fit_top') {
     // initial:true uses fit centering; afterUpdate then pins to top — run once more
     // in case afterUpdate ran before layout settled.
