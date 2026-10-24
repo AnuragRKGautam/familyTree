@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { searchPeople } from '../data/people'
 import { DataAccessError } from '../data/errors'
+import { formatSearchRelationHint } from '../data/personLabels'
 import type { PersonSearchResult } from '../types/domain'
 
 interface PersonSearchProps {
@@ -56,18 +57,24 @@ export function PersonSearch({ onSelect }: PersonSearchProps) {
         <p className="muted">No matches.</p>
       ) : null}
       <ul id="search-results" className="search-results">
-        {results.map((row) => (
-          <li key={row.id}>
-            <button type="button" onClick={() => onSelect(row.id)}>
-              <span>
-                {row.first_name} {row.last_name}
-              </span>
-              {row.matched_alias ? (
-                <span className="muted"> alias: {row.matched_alias}</span>
-              ) : null}
-            </button>
-          </li>
-        ))}
+        {results.map((row) => {
+          const relation = formatSearchRelationHint(row.spouse_names, row.parent_names)
+          return (
+            <li key={row.id}>
+              <button type="button" onClick={() => onSelect(row.id)}>
+                <span className="search-result-main">
+                  <span>
+                    {row.first_name} {row.last_name}
+                  </span>
+                  {row.matched_alias ? (
+                    <span className="muted"> alias: {row.matched_alias}</span>
+                  ) : null}
+                </span>
+                {relation ? <span className="search-result-meta muted">{relation}</span> : null}
+              </button>
+            </li>
+          )
+        })}
       </ul>
     </div>
   )

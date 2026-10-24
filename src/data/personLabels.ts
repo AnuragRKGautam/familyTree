@@ -43,3 +43,21 @@ export function formatPersonPickerLabel(
       : `spouses: ${spouseNames.join(', ')}`
   return `${base} · ${spousePart}`
 }
+
+/** Secondary line for search hits: spouse if married, otherwise parent(s). */
+export function formatSearchRelationHint(
+  spouseNames: string[] | undefined,
+  parentNames: string[] | undefined,
+): string | null {
+  if (spouseNames && spouseNames.length > 0) {
+    return spouseNames.length === 1
+      ? `Spouse: ${spouseNames[0]}`
+      : `Spouses: ${spouseNames.join(', ')}`
+  }
+  if (parentNames && parentNames.length > 0) {
+    return parentNames.length === 1
+      ? `Parent: ${parentNames[0]}`
+      : `Parents: ${parentNames.join(', ')}`
+  }
+  return null
+}

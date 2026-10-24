@@ -3,6 +3,7 @@ import * as f3 from 'family-chart'
 import type { Chart, Data, TreeDatum } from 'family-chart'
 import 'family-chart/styles/family-chart.css'
 import { balanceMultipleSpouses, type ChartTree } from './balanceMultipleSpouses'
+import { formatCardHoverText, isDeceasedFlag } from './cardTooltip'
 import {
   createSortChildrenFromData,
   orderHierarchyChildrenByBirth,
@@ -98,6 +99,77 @@ export function createFamilyChartAdapter(options: FamilyChartAdapterOptions): Fa
   const chart: Chart = f3.createChart(container, data)
 
   const card = chart.setCardHtml().setCardDisplay(cardDisplay)
+
+  let tooltipEl = container.querySelector<HTMLDivElement>('.f3-person-tooltip')
+  if (!tooltipEl) {
+    tooltipEl = document.createElement('div')
+    tooltipEl.className = 'f3-person-tooltip'
+    tooltipEl.hidden = true
+    container.appendChild(tooltipEl)
+  }
+
+  function hideTooltip() {
+    if (!tooltipEl) return
+    tooltipEl.hidden = true
+    tooltipEl.textContent = ''
+  }
+
+  function showTooltip(event: Event, datum: TreeDatum) {
+    if (!tooltipEl) return
+    if (datum.data.to_add || datum.data._new_rel_data) {
+      hideTooltip()
+      return
+    }
+    const personData = datum.data.data as Record<string, unknown>
+    const text = formatCardHoverText(
+      typeof personData.aliases === 'string' ? personData.aliases : null,
+      typeof personData.biography === 'string' ? personData.biography : null,
+    )
+    if (!text) {
+      hideTooltip()
+      return
+    }
+    tooltipEl.hidden = false
+    tooltipEl.textContent = text
+    const mouse = event as MouseEvent
+    const hostRect = container.getBoundingClientRect()
+    const x = mouse.clientX - hostRect.left + 12
+    const y = mouse.clientY - hostRect.top + 12
+    tooltipEl.style.left = `${Math.min(x, hostRect.width - 220)}px`
+    tooltipEl.style.top = `${Math.min(y, hostRect.height - 40)}px`
+  }
+
+  card.setOnCardUpdate(function (this: HTMLElement, datum: TreeDatum) {
+    const el = this.querySelector('.card') as HTMLElement | null
+    if (!el || datum.data.to_add || datum.data._new_rel_data) return
+    const personData = datum.data.data as Record<string, unknown>
+    const deceased = isDeceasedFlag(personData)
+    el.classList.toggle('card-deceased', deceased)
+    if (deceased) {
+      el.setAttribute('data-deceased', 'true')
+      if (!el.querySelector('.deceased-mark')) {
+        const mark = document.createElement('span')
+        mark.className = 'deceased-mark'
+        mark.textContent = '†'
+        mark.title = 'Deceased'
+        mark.setAttribute('aria-label', 'Deceased')
+        const nameRow =
+          el.querySelector('.card-label > div') ?? el.querySelector('.card-inner > div')
+        if (nameRow) nameRow.appendChild(mark)
+        else el.appendChild(mark)
+      }
+    } else {
+      el.removeAttribute('data-deceased')
+      el.querySelector('.deceased-mark')?.remove()
+    }
+  })
+
+  card.onCardMouseenter = (e: Event, d: TreeDatum) => {
+    showTooltip(e, d)
+  }
+  card.onCardMouseleave = () => {
+    hideTooltip()
+  }
 
   if (onCardClick) {
     card.setOnCardClick((_event: MouseEvent, datum: TreeDatum) => {

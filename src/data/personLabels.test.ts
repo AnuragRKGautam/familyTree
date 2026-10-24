@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildSpouseNamesByPersonId, formatPersonPickerLabel } from './personLabels'
+import {
+  buildSpouseNamesByPersonId,
+  formatPersonPickerLabel,
+  formatSearchRelationHint,
+} from './personLabels'
 import type { Partnership, Person } from '../types/domain'
 
 function person(id: string, first: string, last: string): Person {
@@ -33,5 +37,16 @@ describe('personLabels', () => {
     expect(formatPersonPickerLabel(p, ['Sita Sharma'], { includeDates: false })).toBe(
       'Ram Sharma · spouse: Sita Sharma',
     )
+  })
+
+  it('prefers spouse over parents in search hint', () => {
+    expect(formatSearchRelationHint(['Sita Sharma'], ['Ram Parent', 'Sita Parent'])).toBe(
+      'Spouse: Sita Sharma',
+    )
+    expect(formatSearchRelationHint([], ['Ram Parent', 'Sita Parent'])).toBe(
+      'Parents: Ram Parent, Sita Parent',
+    )
+    expect(formatSearchRelationHint([], ['Only Parent'])).toBe('Parent: Only Parent')
+    expect(formatSearchRelationHint([], [])).toBeNull()
   })
 })

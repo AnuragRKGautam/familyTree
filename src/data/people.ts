@@ -12,9 +12,9 @@ import type {
 import { DataAccessError, toDataAccessError } from './errors'
 
 const PEOPLE_PUBLIC_COLUMNS =
-  'id, first_name, last_name, gender, biography, photo_path, created_at, updated_at'
+  'id, first_name, last_name, gender, biography, photo_path, is_deceased, created_at, updated_at'
 const PEOPLE_FULL_COLUMNS =
-  'id, first_name, last_name, gender, birth_date, death_date, biography, photo_path, created_at, updated_at'
+  'id, first_name, last_name, gender, birth_date, death_date, biography, photo_path, is_deceased, created_at, updated_at'
 
 async function sessionCanReadDates(): Promise<boolean> {
   const {
@@ -23,18 +23,36 @@ async function sessionCanReadDates(): Promise<boolean> {
   return Boolean(session?.user)
 }
 
+let deceasedColumnAvailable: boolean | null = null
+
 async function peopleSelectColumns(): Promise<string> {
-  return (await sessionCanReadDates()) ? PEOPLE_FULL_COLUMNS : PEOPLE_PUBLIC_COLUMNS
+  const withDeceased =
+    (await sessionCanReadDates()) ? PEOPLE_FULL_COLUMNS : PEOPLE_PUBLIC_COLUMNS
+  if (deceasedColumnAvailable === false) {
+    return withDeceased.replace(/, is_deceased/g, '')
+  }
+  return withDeceased
+}
+
+/** Drop is_deceased from selects if the migration is not applied yet. */
+function noteDeceasedColumnMissing(): void {
+  deceasedColumnAvailable = false
 }
 
 function mapPerson(row: Record<string, unknown>): Person {
+  const deathDate = (row.death_date as string | null | undefined) ?? null
+  const deceasedFlag = row.is_deceased
   return {
     id: row.id as string,
     first_name: row.first_name as string,
     last_name: row.last_name as string,
     gender: row.gender as Person['gender'],
     birth_date: (row.birth_date as string | null | undefined) ?? null,
-    death_date: (row.death_date as string | null | undefined) ?? null,
+    death_date: deathDate,
+    is_deceased:
+      typeof deceasedFlag === 'boolean'
+        ? deceasedFlag
+        : deathDate != null && deathDate !== '',
     biography: (row.biography as string | null | undefined) ?? null,
     photo_path: (row.photo_path as string | null | undefined) ?? null,
     created_at: row.created_at as string,
@@ -42,13 +60,28 @@ function mapPerson(row: Record<string, unknown>): Person {
   }
 }
 
+function isMissingDeceasedColumn(error: { message?: string; code?: string } | null): boolean {
+  if (!error?.message) return false
+  const msg = error.message.toLowerCase()
+  return msg.includes('is_deceased') || msg.includes('does not exist')
+}
+
 export async function listPeople(): Promise<Person[]> {
   const columns = await peopleSelectColumns()
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('people')
     .select(columns)
     .order('last_name')
     .order('first_name')
+
+  if (error && isMissingDeceasedColumn(error) && columns.includes('is_deceased')) {
+    noteDeceasedColumnMissing()
+    ;({ data, error } = await supabase
+      .from('people')
+      .select(columns.replace(/, is_deceased/g, ''))
+      .order('last_name')
+      .order('first_name'))
+  }
 
   if (error) throw toDataAccessError(error, 'Failed to load people')
   return (data ?? []).map((row) => mapPerson(row as unknown as Record<string, unknown>))
@@ -56,11 +89,20 @@ export async function listPeople(): Promise<Person[]> {
 
 export async function getPerson(id: string): Promise<PersonWithRelations | null> {
   const columns = await peopleSelectColumns()
-  const { data: person, error } = await supabase
+  let { data: person, error } = await supabase
     .from('people')
     .select(columns)
     .eq('id', id)
     .maybeSingle()
+
+  if (error && isMissingDeceasedColumn(error) && columns.includes('is_deceased')) {
+    noteDeceasedColumnMissing()
+    ;({ data: person, error } = await supabase
+      .from('people')
+      .select(columns.replace(/, is_deceased/g, ''))
+      .eq('id', id)
+      .maybeSingle())
+  }
 
   if (error) throw toDataAccessError(error, 'Failed to load person')
   if (!person) return null
@@ -211,6 +253,8 @@ export async function searchPeople(query: string): Promise<PersonSearchResult[]>
       first_name: row.first_name,
       last_name: row.last_name,
       matched_alias: null,
+      spouse_names: [],
+      parent_names: [],
     })
   }
 
@@ -226,13 +270,89 @@ export async function searchPeople(query: string): Promise<PersonSearchResult[]>
         first_name: person.first_name,
         last_name: person.last_name,
         matched_alias: row.alias,
+        spouse_names: [],
+        parent_names: [],
       })
     }
   }
 
+  const ids = [...results.keys()]
+  if (ids.length === 0) return []
+
+  await attachSearchContext(results, ids)
+
   return [...results.values()].sort((a, b) =>
     `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`),
   )
+}
+
+async function attachSearchContext(
+  results: Map<string, PersonSearchResult>,
+  ids: string[],
+): Promise<void> {
+  const idList = ids.join(',')
+  const [{ data: partnerships }, { data: parentEdges }] = await Promise.all([
+    supabase
+      .from('partnerships')
+      .select('person_a_id, person_b_id')
+      .or(`person_a_id.in.(${idList}),person_b_id.in.(${idList})`),
+    supabase.from('parent_child').select('parent_id, child_id').in('child_id', ids),
+  ])
+
+  const relatedIds = new Set<string>()
+  const spouseIdsByPerson = new Map<string, string[]>()
+  const parentIdsByPerson = new Map<string, string[]>()
+
+  for (const edge of partnerships ?? []) {
+    const a = edge.person_a_id as string
+    const b = edge.person_b_id as string
+    if (results.has(a)) {
+      const list = spouseIdsByPerson.get(a) ?? []
+      if (!list.includes(b)) list.push(b)
+      spouseIdsByPerson.set(a, list)
+      relatedIds.add(b)
+    }
+    if (results.has(b)) {
+      const list = spouseIdsByPerson.get(b) ?? []
+      if (!list.includes(a)) list.push(a)
+      spouseIdsByPerson.set(b, list)
+      relatedIds.add(a)
+    }
+  }
+
+  for (const edge of parentEdges ?? []) {
+    const childId = edge.child_id as string
+    const parentId = edge.parent_id as string
+    if (!results.has(childId)) continue
+    const list = parentIdsByPerson.get(childId) ?? []
+    if (!list.includes(parentId)) list.push(parentId)
+    parentIdsByPerson.set(childId, list)
+    relatedIds.add(parentId)
+  }
+
+  if (relatedIds.size === 0) return
+
+  const { data: relatedPeople, error } = await supabase
+    .from('people')
+    .select('id, first_name, last_name')
+    .in('id', [...relatedIds])
+  if (error) throw toDataAccessError(error, 'Search context failed')
+
+  const nameById = new Map(
+    (relatedPeople ?? []).map((p) => [
+      p.id as string,
+      `${p.first_name} ${p.last_name}`.trim(),
+    ]),
+  )
+
+  for (const [id, row] of results) {
+    row.spouse_names = (spouseIdsByPerson.get(id) ?? [])
+      .map((sid) => nameById.get(sid))
+      .filter((n): n is string => Boolean(n))
+    row.parent_names = (parentIdsByPerson.get(id) ?? [])
+      .map((pid) => nameById.get(pid))
+      .filter((n): n is string => Boolean(n))
+  }
 }
 
 export async function listPartnerships(): Promise<Partnership[]> {
@@ -244,13 +364,19 @@ export async function listPartnerships(): Promise<Partnership[]> {
 }
 
 export async function loadTreePayload(): Promise<TreePayload> {
-  const columns = await peopleSelectColumns()
-  const [peopleRes, aliasesRes, partnershipsRes, parentChildRes] = await Promise.all([
+  let columns = await peopleSelectColumns()
+  let [peopleRes, aliasesRes, partnershipsRes, parentChildRes] = await Promise.all([
     supabase.from('people').select(columns),
     supabase.from('person_aliases').select('id, person_id, alias'),
     supabase.from('partnerships').select('id, person_a_id, person_b_id'),
     loadParentChildRows(),
   ])
+
+  if (peopleRes.error && isMissingDeceasedColumn(peopleRes.error) && columns.includes('is_deceased')) {
+    noteDeceasedColumnMissing()
+    columns = columns.replace(/, is_deceased/g, '')
+    peopleRes = await supabase.from('people').select(columns)
+  }
 
   for (const res of [peopleRes, aliasesRes, partnershipsRes]) {
     if (res.error) {

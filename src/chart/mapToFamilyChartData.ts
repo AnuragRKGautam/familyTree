@@ -52,24 +52,41 @@ export function compareChildrenForParent(
  * Each parent's children list is ordered by sort_order, then oldest → youngest.
  */
 export function mapToFamilyChartData(payload: TreePayload): Data {
+  const aliasesByPerson = new Map<string, string[]>()
+  for (const row of payload.aliases) {
+    const list = aliasesByPerson.get(row.person_id) ?? []
+    if (!list.includes(row.alias)) list.push(row.alias)
+    aliasesByPerson.set(row.person_id, list)
+  }
+
   const byId = new Map(
-    payload.people.map((p) => [
-      p.id,
-      {
-        id: p.id,
-        data: {
-          gender: toChartGender(p.gender),
-          'first name': p.first_name,
-          'last name': p.last_name,
-          birthday: p.birth_date ?? '',
+    payload.people.map((p) => {
+      const aliases = aliasesByPerson.get(p.id) ?? []
+      const deceased =
+        p.is_deceased === true ||
+        (typeof p.death_date === 'string' && p.death_date.trim().length > 0)
+      return [
+        p.id,
+        {
+          id: p.id,
+          data: {
+            gender: toChartGender(p.gender),
+            'first name': p.first_name,
+            'last name': p.last_name,
+            birthday: p.birth_date ?? '',
+            death: p.death_date ?? '',
+            deceased,
+            aliases: aliases.join(', '),
+            biography: p.biography ?? '',
+          },
+          rels: {
+            parents: [] as string[],
+            spouses: [] as string[],
+            children: [] as string[],
+          },
         },
-        rels: {
-          parents: [] as string[],
-          spouses: [] as string[],
-          children: [] as string[],
-        },
-      },
-    ]),
+      ] as const
+    }),
   )
 
   const birthdayById = new Map(

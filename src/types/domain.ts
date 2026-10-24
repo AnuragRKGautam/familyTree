@@ -19,6 +19,8 @@ export interface Person {
   gender: Gender
   birth_date: string | null
   death_date: string | null
+  /** True when death_date is set; readable publicly without exposing the date. */
+  is_deceased?: boolean | null
   biography: string | null
   photo_path: string | null
   created_at: string
@@ -50,6 +52,10 @@ export interface PersonSearchResult {
   first_name: string
   last_name: string
   matched_alias: string | null
+  /** Spouse display names; preferred over parents when present. */
+  spouse_names: string[]
+  /** Parent display names; used when the person has no spouse. */
+  parent_names: string[]
 }
 
 export interface PersonWithRelations extends Person {
