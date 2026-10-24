@@ -4,9 +4,12 @@ import {
   buildPathChartData,
   cousinLineSide,
   findPeakOnPath,
+  findRelationBetween,
   findShortestRelationPath,
   formatKinshipLabel,
+  generationDeltaAlongPath,
   generationRelativeTo,
+  labelFromPathGenerations,
   relationSentence,
   sanitizeChartData,
 } from './findRelation'
@@ -142,6 +145,40 @@ describe('maternal cousin line', () => {
     expect(formatKinshipLabel('1st Cousin', 'M', 'maternal', 'same')).toBe(
       'Maternal cousin brother',
     )
+  })
+})
+
+describe('path through spouses when co-parent links are missing', () => {
+  // Satya → Avnish → Ritu (DIL) → Anurag → Wife → Riddhi
+  // Blood parent links to fathers omitted — matches incomplete tree data.
+  const data = [
+    person('satya', 'Satya', 'M', { children: ['avnish'] }),
+    person('avnish', 'Avnish', 'M', { parents: ['satya'], spouses: ['ritu'] }),
+    person('ritu', 'Ritu', 'F', { spouses: ['avnish'], children: ['anurag'] }),
+    person('anurag', 'Anurag', 'M', { parents: ['ritu'], spouses: ['wife'] }),
+    person('wife', 'Wife', 'F', { spouses: ['anurag'], children: ['riddhi'] }),
+    person('riddhi', 'Riddhi', 'F', { parents: ['wife'] }),
+  ] as Data
+
+  it('counts three descending generations ignoring spouse steps', () => {
+    const path = findShortestRelationPath(data, 'satya', 'riddhi')!
+    expect(path.length - 1).toBe(5)
+    expect(generationDeltaAlongPath(data, path)).toBe(3)
+    expect(labelFromPathGenerations(data, path, 'F')).toBe('Great-Granddaughter')
+  })
+
+  it('keeps the descending line visible under the blood-side parents', () => {
+    const path = findShortestRelationPath(data, 'satya', 'riddhi')!
+    const chart = buildPathChartData(data, path, 'satya', 'Great-Granddaughter')
+    expect(chart.find((d) => d.id === 'avnish')?.rels.children).toContain('anurag')
+    expect(chart.find((d) => d.id === 'anurag')?.rels.children).toContain('riddhi')
+    expect(chart.find((d) => d.id === 'riddhi')?.data.kinship).toBe('Great-Granddaughter')
+  })
+
+  it('labels the relation without falling back to N-step relative', () => {
+    const result = findRelationBetween(data, 'satya', 'riddhi')
+    expect(result.kinshipLabel).toBe('Great-Granddaughter')
+    expect(result.pathData?.find((d) => d.id === 'riddhi')).toBeTruthy()
   })
 })
 

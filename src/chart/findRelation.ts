@@ -72,7 +72,10 @@ export function findRelationBetween(data: Data, fromId: string, toId: string): R
   }
 
   if (!kinshipLabel) {
-    kinshipLabel = describePathFallback(pathIds.length)
+    const toGender = clean.find((d) => d.id === toId)?.data.gender
+    kinshipLabel =
+      labelFromPathGenerations(clean, pathIds, toGender) ??
+      describePathFallback(pathIds.length)
   }
 
   const peakId = findPeakOnPath(clean, pathIds)
@@ -233,6 +236,28 @@ export function buildDualBranchPathChart(
     }
     const fromMap = kinshipMap[id]
     if (fromMap) return formatKinshipLabel(fromMap, gender, side, generation)
+
+    // Kinship engine often skips people only reachable via spouse bridges.
+    // Only infer a generation label when the last step to this person is blood
+    // (not a spouse hop — that would mis-label in-laws as grandchildren).
+    const fromIdx = pathIds.indexOf(fromId)
+    const idIdx = pathIds.indexOf(id)
+    if (fromIdx >= 0 && idIdx >= 0 && fromIdx !== idIdx) {
+      const sub =
+        fromIdx < idIdx
+          ? pathIds.slice(fromIdx, idIdx + 1)
+          : pathIds.slice(idIdx, fromIdx + 1).reverse()
+      const prevId = sub[sub.length - 2]
+      const lastId = sub[sub.length - 1]
+      if (prevId && lastId) {
+        const prev = byId.get(prevId)
+        const viaSpouse = (prev?.rels.spouses ?? []).includes(lastId)
+        if (!viaSpouse) {
+          const fromPath = labelFromPathGenerations(data, sub, gender)
+          if (fromPath) return fromPath
+        }
+      }
+    }
     return 'Relative'
   }
 
@@ -270,8 +295,15 @@ export function buildDualBranchPathChart(
     return null
   }
 
-  /** Wire chain[i] → chain[i+1] using real edge direction when possible. */
+  /**
+   * Wire chain[i] → chain[i+1]. When the path steps onto a spouse then to that
+   * spouse’s child (common when co-parent links are missing in the data), also
+   * attach the child to the spouse’s partner so family-chart keeps showing the
+   * descending line instead of stopping at the in-law.
+   */
   function wireChain(chain: string[]) {
+    let spouseAnchorId: string | null = null
+
     for (let i = 0; i < chain.length - 1; i++) {
       const aId = chain[i]
       const bId = chain[i + 1]
@@ -289,11 +321,13 @@ export function buildDualBranchPathChart(
       if (kind === 'spouse' || (!kind && edgeKind(bId, aId) === 'spouse')) {
         if (!spousesA.includes(bId)) spousesA.push(bId)
         if (!spousesB.includes(aId)) spousesB.push(aId)
+        spouseAnchorId = aId
         continue
       }
 
       // Default: earlier in chain-from-peak is parent of later (descending).
       if (kind === 'parent') {
+        spouseAnchorId = null
         // a's parent is b — invert for descending tree from peak
         if (!childrenB.includes(aId)) childrenB.push(aId)
         if (!parentsA.includes(bId)) parentsA.push(bId)
@@ -301,6 +335,14 @@ export function buildDualBranchPathChart(
         // child edge or unknown: a parent of b
         if (!childrenA.includes(bId)) childrenA.push(bId)
         if (!parentsB.includes(aId)) parentsB.push(aId)
+        if (spouseAnchorId && spouseAnchorId !== aId) {
+          const anchor = ensure(spouseAnchorId)
+          const anchorChildren = anchor.rels.children ?? (anchor.rels.children = [])
+          const childParents = b.rels.parents ?? (b.rels.parents = [])
+          if (!anchorChildren.includes(bId)) anchorChildren.push(bId)
+          if (!childParents.includes(spouseAnchorId)) childParents.push(spouseAnchorId)
+        }
+        spouseAnchorId = null
       }
     }
   }
@@ -366,6 +408,65 @@ function describePathFallback(pathLength: number): string {
   if (pathLength <= 1) return 'Self'
   if (pathLength === 2) return 'Relative'
   return `${pathLength - 1}-step relative`
+}
+
+/**
+ * Net generation change along a path: child +1, parent −1, spouse 0.
+ * Used when family-chart kinship misses a label (often when co-parent links
+ * are incomplete and the only path walks through spouses).
+ */
+export function generationDeltaAlongPath(data: Data, pathIds: string[]): number | null {
+  if (pathIds.length < 2) return 0
+  const byId = new Map(data.map((d) => [d.id, d]))
+  let delta = 0
+  for (let i = 0; i < pathIds.length - 1; i++) {
+    const fromId = pathIds[i]
+    const toId = pathIds[i + 1]
+    if (fromId === undefined || toId === undefined) return null
+    const from = byId.get(fromId)
+    if (!from) return null
+    if ((from.rels.children ?? []).includes(toId)) delta += 1
+    else if ((from.rels.parents ?? []).includes(toId)) delta -= 1
+    else if ((from.rels.spouses ?? []).includes(toId)) {
+      // same generation
+    } else {
+      return null
+    }
+  }
+  return delta
+}
+
+/** Kinship-style label from generation delta when the library has no label. */
+export function labelFromPathGenerations(
+  data: Data,
+  pathIds: string[],
+  toGender?: string | null,
+): string | null {
+  const delta = generationDeltaAlongPath(data, pathIds)
+  if (delta === null || delta === 0) return null
+  const female = toGender === 'F'
+  const male = toGender === 'M'
+
+  if (delta > 0) {
+    if (delta === 1) return female ? 'Daughter' : male ? 'Son' : 'Child'
+    if (delta === 2) return female ? 'Granddaughter' : male ? 'Grandson' : 'Grandchild'
+    const greats = 'Great-'.repeat(delta - 2)
+    return female
+      ? `${greats}Granddaughter`
+      : male
+        ? `${greats}Grandson`
+        : `${greats}Grandchild`
+  }
+
+  const up = -delta
+  if (up === 1) return female ? 'Mother' : male ? 'Father' : 'Parent'
+  if (up === 2) return female ? 'Grandmother' : male ? 'Grandfather' : 'Grandparent'
+  const greats = 'Great-'.repeat(up - 2)
+  return female
+    ? `${greats}Grandmother`
+    : male
+      ? `${greats}Grandfather`
+      : `${greats}Grandparent`
 }
 
 export type CousinLineSide = 'paternal' | 'maternal'
