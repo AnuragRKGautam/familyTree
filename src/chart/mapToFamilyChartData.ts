@@ -1,5 +1,6 @@
 import type { Data } from 'family-chart'
 import type { TreePayload } from '../types/domain'
+import { compareBirthdays } from './sortChildrenByBirthday'
 
 type GenderCode = 'M' | 'F'
 
@@ -11,6 +12,7 @@ function toChartGender(gender: string): GenderCode {
 /**
  * Maps app domain rows into the documented family-chart Data format.
  * Relationships are written bidirectionally as required by the library docs.
+ * Each parent's children list is ordered oldest → youngest by birth date.
  */
 export function mapToFamilyChartData(payload: TreePayload): Data {
   const byId = new Map(
@@ -55,6 +57,17 @@ export function mapToFamilyChartData(payload: TreePayload): Data {
     if (!b.rels.spouses.includes(edge.person_a_id)) {
       b.rels.spouses.push(edge.person_a_id)
     }
+  }
+
+  for (const person of byId.values()) {
+    if (person.rels.children.length < 2) continue
+    person.rels.children.sort((aId, bId) => {
+      const a = byId.get(aId)
+      const b = byId.get(bId)
+      const byDate = compareBirthdays(a?.data.birthday, b?.data.birthday)
+      if (byDate !== 0) return byDate
+      return aId.localeCompare(bId)
+    })
   }
 
   return [...byId.values()] as Data

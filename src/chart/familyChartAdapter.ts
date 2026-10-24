@@ -3,6 +3,7 @@ import * as f3 from 'family-chart'
 import type { Chart, Data, TreeDatum } from 'family-chart'
 import 'family-chart/styles/family-chart.css'
 import { balanceMultipleSpouses, type ChartTree } from './balanceMultipleSpouses'
+import { sortChildrenByBirthday } from './sortChildrenByBirthday'
 
 export type TreePosition = 'fit' | 'main_to_middle' | 'fit_top'
 
@@ -104,6 +105,8 @@ export function createFamilyChartAdapter(options: FamilyChartAdapterOptions): Fa
 
   chart.setAncestryDepth(ancestryDepth).setProgenyDepth(progenyDepth)
   chart.setSingleParentEmptyCard(singleParentEmptyCard, { label: 'Unknown parent' })
+  // Left → right: oldest sibling first, youngest last (by birthday).
+  chart.setSortChildrenFunction(sortChildrenByBirthday)
   if (typeof cardXSpacing === 'number') chart.setCardXSpacing(cardXSpacing)
   if (typeof cardYSpacing === 'number') chart.setCardYSpacing(cardYSpacing)
 
