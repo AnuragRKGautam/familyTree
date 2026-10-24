@@ -120,6 +120,8 @@ export function RelationFinderPage() {
       <h1>Find relation</h1>
       <p className="lede">
         Choose two people to see how they are related, with a small chart of the connecting path.
+        Cousin lines use Indian English labels: paternal/maternal cousin brother or sister, and a
+        parent’s cousin as paternal/maternal aunt or uncle.
       </p>
 
       <div className="relation-picker">

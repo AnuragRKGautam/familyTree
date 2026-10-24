@@ -52,7 +52,12 @@ export function findRelationBetween(data: Data, fromId: string, toId: string): R
     try {
       kinshipMap = chart.calculateKinships(fromId, { show_in_law: true })
       const rawLabel = kinshipMap[toId] ?? null
-      if (rawLabel) kinshipLabel = formatKinshipLabel(rawLabel)
+      if (rawLabel) {
+        const toGender = clean.find((d) => d.id === toId)?.data.gender
+        const side = cousinLineSide(clean, fromId, toId)
+        const generation = generationRelativeTo(clean, fromId, toId)
+        kinshipLabel = formatKinshipLabel(rawLabel, toGender, side, generation)
+      }
     } catch {
       kinshipMap = {}
       kinshipLabel = null
@@ -215,14 +220,19 @@ export function buildDualBranchPathChart(
   const nodes = new Map<string, Datum>()
 
   function labelFor(id: string): string {
+    const gender = byId.get(id)?.data.gender
     if (id === fromId) return 'Self'
     if (id === toId && toKinshipLabel) return toKinshipLabel
+    const side = cousinLineSide(data, fromId, id)
+    const generation = generationRelativeTo(data, fromId, id)
     if (id === peakId && id !== fromId && id !== toId) {
       const fromMap = kinshipMap[id]
-      return fromMap ? formatKinshipLabel(fromMap) : 'Common ancestor'
+      return fromMap
+        ? formatKinshipLabel(fromMap, gender, side, generation)
+        : 'Common ancestor'
     }
     const fromMap = kinshipMap[id]
-    if (fromMap) return formatKinshipLabel(fromMap)
+    if (fromMap) return formatKinshipLabel(fromMap, gender, side, generation)
     return 'Relative'
   }
 
@@ -358,10 +368,196 @@ function describePathFallback(pathLength: number): string {
   return `${pathLength - 1}-step relative`
 }
 
-export function formatKinshipLabel(raw: string): string {
+export type CousinLineSide = 'paternal' | 'maternal'
+export type GenerationRelative = 'older' | 'younger' | 'same'
+
+/** All ancestors of personId, including personId. */
+export function ancestorSet(data: Data, personId: string): Set<string> {
+  const byId = new Map(data.map((d) => [d.id, d]))
+  const out = new Set<string>()
+  const stack = [personId]
+  while (stack.length > 0) {
+    const id = stack.pop()
+    if (id === undefined || out.has(id)) continue
+    out.add(id)
+    const parents = byId.get(id)?.rels.parents ?? []
+    for (const p of parents) stack.push(p)
+  }
+  return out
+}
+
+/** Lowest common ancestor of a and b (first ancestor of b that is also ancestor of a). */
+export function findLowestCommonAncestor(
+  data: Data,
+  aId: string,
+  bId: string,
+): string | null {
+  const ancestorsA = ancestorSet(data, aId)
+  const byId = new Map(data.map((d) => [d.id, d]))
+  const queue = [bId]
+  const seen = new Set<string>([bId])
+  while (queue.length > 0) {
+    const cur = queue.shift()
+    if (cur === undefined) break
+    if (ancestorsA.has(cur)) return cur
+    for (const p of byId.get(cur)?.rels.parents ?? []) {
+      if (!seen.has(p)) {
+        seen.add(p)
+        queue.push(p)
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * Whether the link from ego (fromId) to relative is through ego’s father
+ * (paternal) or mother (maternal). Used for cousin brother/sister labels.
+ */
+export function cousinLineSide(
+  data: Data,
+  fromId: string,
+  toId: string,
+): CousinLineSide | null {
+  if (fromId === toId) return null
+  const byId = new Map(data.map((d) => [d.id, d]))
+  const lca = findLowestCommonAncestor(data, fromId, toId)
+  if (!lca || lca === fromId) return null
+
+  const parents = byId.get(fromId)?.rels.parents ?? []
+  let paternalHit = false
+  let maternalHit = false
+
+  for (const pId of parents) {
+    const parent = byId.get(pId)
+    if (!parent) continue
+    if (!ancestorSet(data, pId).has(lca)) continue
+    if (parent.data.gender === 'M') paternalHit = true
+    else if (parent.data.gender === 'F') maternalHit = true
+  }
+
+  if (paternalHit && !maternalHit) return 'paternal'
+  if (maternalHit && !paternalHit) return 'maternal'
+  return null
+}
+
+/** Generations from person up to ancestor (0 if same person). */
+export function depthToAncestor(
+  data: Data,
+  personId: string,
+  ancestorId: string,
+): number | null {
+  if (personId === ancestorId) return 0
+  const byId = new Map(data.map((d) => [d.id, d]))
+  const queue: Array<{ id: string; depth: number }> = [{ id: personId, depth: 0 }]
+  const seen = new Set<string>([personId])
+  while (queue.length > 0) {
+    const cur = queue.shift()
+    if (cur === undefined) break
+    for (const p of byId.get(cur.id)?.rels.parents ?? []) {
+      if (p === ancestorId) return cur.depth + 1
+      if (!seen.has(p)) {
+        seen.add(p)
+        queue.push({ id: p, depth: cur.depth + 1 })
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * Whether `toId` is an older, younger, or same generation as `fromId`
+ * relative to their lowest common ancestor.
+ */
+export function generationRelativeTo(
+  data: Data,
+  fromId: string,
+  toId: string,
+): GenerationRelative | null {
+  if (fromId === toId) return 'same'
+  const lca = findLowestCommonAncestor(data, fromId, toId)
+  if (!lca) return null
+  const fromDepth = depthToAncestor(data, fromId, lca)
+  const toDepth = depthToAncestor(data, toId, lca)
+  if (fromDepth === null || toDepth === null) return null
+  if (toDepth < fromDepth) return 'older'
+  if (toDepth > fromDepth) return 'younger'
+  return 'same'
+}
+
+function sidePrefix(side?: CousinLineSide | null): string {
+  if (side === 'paternal') return 'Paternal '
+  if (side === 'maternal') return 'Maternal '
+  return ''
+}
+
+function titleCasePhrase(phrase: string): string {
+  if (!phrase) return phrase
+  return phrase.charAt(0).toUpperCase() + phrase.slice(1)
+}
+
+/**
+ * Format kinship for display (Indian English):
+ * - same-gen cousins → paternal/maternal cousin brother|sister
+ * - parent’s cousin (cousin once removed, older) → paternal/maternal aunt|uncle
+ * - cousin’s child (cousin once removed, younger) → paternal/maternal niece|nephew
+ */
+export function formatKinshipLabel(
+  raw: string,
+  gender?: string | null,
+  side?: CousinLineSide | null,
+  generation?: GenerationRelative | null,
+): string {
   const trimmed = raw.trim()
   if (!trimmed) return ''
-  if (trimmed.toLowerCase() === 'self') return 'Self'
+  const lower = trimmed.toLowerCase()
+  if (lower === 'self') return 'Self'
+
+  const g = gender === 'M' || gender === 'F' ? gender : null
+  const prefix = sidePrefix(side)
+  const inLaw = lower.includes('in-law')
+
+  // Parent’s siblings (and similar) — add paternal/maternal when known.
+  if (/^(great[- ]?)?(grand)?(aunt|uncle)(-in-law)?$/.test(lower)) {
+    return titleCasePhrase(`${prefix}${lower}`)
+  }
+
+  if (lower.includes('cousin')) {
+    const isRemoved = lower.includes('removed')
+
+    // Parent’s cousin → aunt/uncle; cousin’s child → niece/nephew.
+    if (isRemoved && !inLaw && (generation === 'older' || generation === 'younger')) {
+      let role: string
+      if (generation === 'older') {
+        if (g === 'F') role = 'aunt'
+        else if (g === 'M') role = 'uncle'
+        else role = 'aunt/uncle'
+      } else {
+        if (g === 'F') role = 'niece'
+        else if (g === 'M') role = 'nephew'
+        else role = 'niece/nephew'
+      }
+      return titleCasePhrase(`${prefix}${role}`)
+    }
+
+    let role: string
+    if (g === 'F') role = inLaw ? 'cousin sister-in-law' : 'cousin sister'
+    else if (g === 'M') role = inLaw ? 'cousin brother-in-law' : 'cousin brother'
+    else role = inLaw ? 'cousin-in-law' : 'cousin'
+
+    const removedMatch = lower.match(/(\d+)\s*x\s*removed/)
+    const removedSuffix =
+      generation === 'same' || generation == null
+        ? removedMatch
+          ? ` (${removedMatch[1]}x removed)`
+          : lower.includes('removed')
+            ? ' (once removed)'
+            : ''
+        : ''
+
+    return `${titleCasePhrase(`${prefix}${role}`)}${removedSuffix}`
+  }
+
   return trimmed
     .split(/([\s-]+)/)
     .map((part) => {
