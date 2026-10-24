@@ -59,35 +59,50 @@ export function mapToFamilyChartData(payload: TreePayload): Data {
     aliasesByPerson.set(row.person_id, list)
   }
 
-  const byId = new Map(
-    payload.people.map((p) => {
-      const aliases = aliasesByPerson.get(p.id) ?? []
-      const deceased =
-        p.is_deceased === true ||
-        (typeof p.death_date === 'string' && p.death_date.trim().length > 0)
-      return [
-        p.id,
-        {
-          id: p.id,
-          data: {
-            gender: toChartGender(p.gender),
-            'first name': p.first_name,
-            'last name': p.last_name,
-            birthday: p.birth_date ?? '',
-            death: p.death_date ?? '',
-            deceased,
-            aliases: aliases.join(', '),
-            biography: p.biography ?? '',
-          },
-          rels: {
-            parents: [] as string[],
-            spouses: [] as string[],
-            children: [] as string[],
-          },
-        },
-      ] as const
-    }),
-  )
+  type ChartPerson = {
+    id: string
+    data: {
+      gender: GenderCode
+      'first name': string
+      'last name': string
+      birthday: string
+      death: string
+      deceased: boolean
+      aliases: string
+      biography: string
+    }
+    rels: {
+      parents: string[]
+      spouses: string[]
+      children: string[]
+    }
+  }
+
+  const byId = new Map<string, ChartPerson>()
+  for (const p of payload.people) {
+    const aliases = aliasesByPerson.get(p.id) ?? []
+    const deceased =
+      p.is_deceased === true ||
+      (typeof p.death_date === 'string' && p.death_date.trim().length > 0)
+    byId.set(p.id, {
+      id: p.id,
+      data: {
+        gender: toChartGender(p.gender),
+        'first name': p.first_name,
+        'last name': p.last_name,
+        birthday: p.birth_date ?? '',
+        death: p.death_date ?? '',
+        deceased,
+        aliases: aliases.join(', '),
+        biography: p.biography ?? '',
+      },
+      rels: {
+        parents: [],
+        spouses: [],
+        children: [],
+      },
+    })
+  }
 
   const birthdayById = new Map(
     payload.people.map((p) => [p.id, p.birth_date ?? ''] as const),
