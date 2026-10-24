@@ -69,18 +69,25 @@ export function RelationFinderPage() {
       return
     }
     setFinding(true)
-    try {
-      const result = findRelationBetween(chartData, fromId, toId)
-      setResultLabel(result.kinshipLabel)
-      setPathData(result.pathData)
-      if (!result.kinshipLabel) {
-        setResultError(relationSentence(nameOf(fromId), nameOf(toId), null))
+    // Defer so the button state paints; kinship walks can be heavy.
+    window.setTimeout(() => {
+      try {
+        const result = findRelationBetween(chartData, fromId, toId)
+        setResultLabel(result.kinshipLabel)
+        setPathData(result.pathData)
+        if (!result.kinshipLabel && !result.pathData) {
+          setResultError(relationSentence(nameOf(fromId), nameOf(toId), null))
+        } else if (result.kinshipLabel && !result.pathData) {
+          setResultError(
+            'Related, but a connection chart could not be built for these two people.',
+          )
+        }
+      } catch (err) {
+        setResultError(err instanceof Error ? err.message : 'Could not compute relation')
+      } finally {
+        setFinding(false)
       }
-    } catch (err) {
-      setResultError(err instanceof Error ? err.message : 'Could not compute relation')
-    } finally {
-      setFinding(false)
-    }
+    }, 0)
   }
 
   function swapPeople() {
