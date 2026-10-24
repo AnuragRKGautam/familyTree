@@ -148,37 +148,61 @@ describe('maternal cousin line', () => {
   })
 })
 
-describe('path through spouses when co-parent links are missing', () => {
-  // Satya → Avnish → Ritu (DIL) → Anurag → Wife → Riddhi
-  // Blood parent links to fathers omitted — matches incomplete tree data.
+describe('daughter-in-law’s brother and his child (Satya → Riddhi)', () => {
+  // Ritu (DIL) and Anurag are siblings; Riddhi is Anurag’s daughter — not Satya’s granddaughter.
   const data = [
     person('satya', 'Satya', 'M', { children: ['avnish'] }),
     person('avnish', 'Avnish', 'M', { parents: ['satya'], spouses: ['ritu'] }),
-    person('ritu', 'Ritu', 'F', { spouses: ['avnish'], children: ['anurag'] }),
-    person('anurag', 'Anurag', 'M', { parents: ['ritu'], spouses: ['wife'] }),
-    person('wife', 'Wife', 'F', { spouses: ['anurag'], children: ['riddhi'] }),
-    person('riddhi', 'Riddhi', 'F', { parents: ['wife'] }),
+    person('gparent', 'GautamParent', 'M', { children: ['ritu', 'anurag'] }),
+    person('ritu', 'Ritu', 'F', {
+      parents: ['gparent'],
+      spouses: ['avnish'],
+    }),
+    person('anurag', 'Anurag', 'M', { parents: ['gparent'], children: ['riddhi'] }),
+    person('riddhi', 'Riddhi', 'F', { parents: ['anurag'] }),
   ] as Data
 
-  it('counts three descending generations ignoring spouse steps', () => {
+  it('does not call Riddhi a granddaughter (path goes up and down by marriage)', () => {
     const path = findShortestRelationPath(data, 'satya', 'riddhi')!
-    expect(path.length - 1).toBe(5)
-    expect(generationDeltaAlongPath(data, path)).toBe(3)
-    expect(labelFromPathGenerations(data, path, 'F')).toBe('Great-Granddaughter')
+    expect(path).toContain('gparent')
+    expect(path).toContain('anurag')
+    expect(generationDeltaAlongPath(data, path)).toBeNull()
+    expect(labelFromPathGenerations(data, path, 'F')).toBeNull()
   })
 
-  it('keeps the descending line visible under the blood-side parents', () => {
+  it('roots the chart at the DIL’s parent so both sides (Satya and Riddhi) show', () => {
     const path = findShortestRelationPath(data, 'satya', 'riddhi')!
-    const chart = buildPathChartData(data, path, 'satya', 'Great-Granddaughter')
-    expect(chart.find((d) => d.id === 'avnish')?.rels.children).toContain('anurag')
+    expect(findPeakOnPath(data, path)).toBe('gparent')
+    const chart = buildPathChartData(data, path, 'satya', 'Relative by marriage')
+    const root = chart.find((d) => d.id === 'gparent')
+    expect(root?.rels.children?.sort()).toEqual(['anurag', 'ritu'])
+    expect(chart.find((d) => d.id === 'riddhi')).toBeTruthy()
     expect(chart.find((d) => d.id === 'anurag')?.rels.children).toContain('riddhi')
-    expect(chart.find((d) => d.id === 'riddhi')?.data.kinship).toBe('Great-Granddaughter')
+    expect(chart.find((d) => d.id === 'ritu')?.rels.spouses).toContain('avnish')
   })
 
-  it('labels the relation without falling back to N-step relative', () => {
+  it('findRelation includes Riddhi and avoids a false granddaughter label', () => {
     const result = findRelationBetween(data, 'satya', 'riddhi')
-    expect(result.kinshipLabel).toBe('Great-Granddaughter')
+    expect(result.kinshipLabel?.toLowerCase()).not.toContain('granddaughter')
+    expect(result.chartRootId).toBe('gparent')
     expect(result.pathData?.find((d) => d.id === 'riddhi')).toBeTruthy()
+    expect(result.pathData?.find((d) => d.id === 'anurag')).toBeTruthy()
+  })
+})
+
+describe('path through spouse when child is only linked to the in-law', () => {
+  const data = [
+    person('satya', 'Satya', 'M', { children: ['avnish'] }),
+    person('avnish', 'Avnish', 'M', { parents: ['satya'], spouses: ['ritu'] }),
+    person('ritu', 'Ritu', 'F', { spouses: ['avnish'], children: ['child'] }),
+    person('child', 'Child', 'F', { parents: ['ritu'] }),
+  ] as Data
+
+  it('shows the child under the blood-side parent in the path chart', () => {
+    const path = findShortestRelationPath(data, 'satya', 'child')!
+    const chart = buildPathChartData(data, path, 'satya', 'Granddaughter')
+    expect(chart.find((d) => d.id === 'avnish')?.rels.children).toContain('child')
+    expect(chart.find((d) => d.id === 'ritu')?.rels.children ?? []).not.toContain('child')
   })
 })
 

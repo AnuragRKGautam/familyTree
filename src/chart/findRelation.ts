@@ -75,7 +75,7 @@ export function findRelationBetween(data: Data, fromId: string, toId: string): R
     const toGender = clean.find((d) => d.id === toId)?.data.gender
     kinshipLabel =
       labelFromPathGenerations(clean, pathIds, toGender) ??
-      describePathFallback(pathIds.length)
+      describePathConnection(clean, pathIds)
   }
 
   const peakId = findPeakOnPath(clean, pathIds)
@@ -160,8 +160,12 @@ function reconstructPath(
 }
 
 /**
- * Peak / common-ancestor index on a path: last node reached while still
- * moving to a parent (or across a spouse), before descending to children.
+ * Peak on a path: the last node at minimum generation depth when walking from
+ * the start (parent −1, child +1, spouse 0).
+ *
+ * This roots charts at the true hinge — e.g. daughter-in-law’s parent when the
+ * path goes Satya → son → DIL → up to her parents → across to her brother →
+ * down to his child — instead of stopping at the first person.
  */
 export function findPeakOnPath(data: Data, pathIds: string[]): string {
   if (pathIds.length === 0) return ''
@@ -169,6 +173,8 @@ export function findPeakOnPath(data: Data, pathIds: string[]): string {
   if (pathIds.length === 1 || first === undefined) return first ?? ''
 
   const byId = new Map(data.map((d) => [d.id, d]))
+  let depth = 0
+  let minDepth = 0
   let peakIndex = 0
 
   for (let i = 0; i < pathIds.length - 1; i++) {
@@ -178,20 +184,14 @@ export function findPeakOnPath(data: Data, pathIds: string[]): string {
     const from = byId.get(fromId)
     if (!from) break
 
-    const goingUp = (from.rels.parents ?? []).includes(nextId)
-    const goingDown = (from.rels.children ?? []).includes(nextId)
-    const viaSpouse = (from.rels.spouses ?? []).includes(nextId)
+    if ((from.rels.parents ?? []).includes(nextId)) depth -= 1
+    else if ((from.rels.children ?? []).includes(nextId)) depth += 1
+    // spouse: same generation
 
-    if (goingUp || viaSpouse) {
+    if (depth <= minDepth) {
+      minDepth = depth
       peakIndex = i + 1
-      continue
     }
-    if (goingDown) {
-      // Started descending — peak is the current node.
-      break
-    }
-    // Unknown edge type: keep advancing the peak.
-    peakIndex = i + 1
   }
 
   return pathIds[peakIndex] ?? first
@@ -295,11 +295,20 @@ export function buildDualBranchPathChart(
     return null
   }
 
+  function linkParentChild(parentId: string, childId: string) {
+    const parent = ensure(parentId)
+    const child = ensure(childId)
+    const children = parent.rels.children ?? (parent.rels.children = [])
+    const parents = child.rels.parents ?? (child.rels.parents = [])
+    if (!children.includes(childId)) children.push(childId)
+    if (!parents.includes(parentId)) parents.push(parentId)
+  }
+
   /**
-   * Wire chain[i] → chain[i+1]. When the path steps onto a spouse then to that
-   * spouse’s child (common when co-parent links are missing in the data), also
-   * attach the child to the spouse’s partner so family-chart keeps showing the
-   * descending line instead of stopping at the in-law.
+   * Wire chain[i] → chain[i+1]. Spouse hops are kept as spouse links, but the
+   * next blood child is hung off the blood-side partner only. family-chart
+   * otherwise parks those children under the in-law card and they disappear
+   * from the descending tree (e.g. Satya → Avnish + Ritu, Riddhi missing).
    */
   function wireChain(chain: string[]) {
     let spouseAnchorId: string | null = null
@@ -313,10 +322,6 @@ export function buildDualBranchPathChart(
       const kind = edgeKind(aId, bId)
       const spousesA = a.rels.spouses ?? (a.rels.spouses = [])
       const spousesB = b.rels.spouses ?? (b.rels.spouses = [])
-      const childrenA = a.rels.children ?? (a.rels.children = [])
-      const childrenB = b.rels.children ?? (b.rels.children = [])
-      const parentsA = a.rels.parents ?? (a.rels.parents = [])
-      const parentsB = b.rels.parents ?? (b.rels.parents = [])
 
       if (kind === 'spouse' || (!kind && edgeKind(bId, aId) === 'spouse')) {
         if (!spousesA.includes(bId)) spousesA.push(bId)
@@ -325,23 +330,17 @@ export function buildDualBranchPathChart(
         continue
       }
 
-      // Default: earlier in chain-from-peak is parent of later (descending).
       if (kind === 'parent') {
         spouseAnchorId = null
         // a's parent is b — invert for descending tree from peak
-        if (!childrenB.includes(aId)) childrenB.push(aId)
-        if (!parentsA.includes(bId)) parentsA.push(bId)
+        linkParentChild(bId, aId)
+      } else if (spouseAnchorId && spouseAnchorId !== aId) {
+        // Path was … → blood → spouse(a) → child(b): show child under blood partner.
+        ensure(aId) // keep the in-law card on the chart as spouse only
+        linkParentChild(spouseAnchorId, bId)
+        spouseAnchorId = null
       } else {
-        // child edge or unknown: a parent of b
-        if (!childrenA.includes(bId)) childrenA.push(bId)
-        if (!parentsB.includes(aId)) parentsB.push(aId)
-        if (spouseAnchorId && spouseAnchorId !== aId) {
-          const anchor = ensure(spouseAnchorId)
-          const anchorChildren = anchor.rels.children ?? (anchor.rels.children = [])
-          const childParents = b.rels.parents ?? (b.rels.parents = [])
-          if (!anchorChildren.includes(bId)) anchorChildren.push(bId)
-          if (!childParents.includes(spouseAnchorId)) childParents.push(spouseAnchorId)
-        }
+        linkParentChild(aId, bId)
         spouseAnchorId = null
       }
     }
@@ -410,33 +409,60 @@ function describePathFallback(pathLength: number): string {
   return `${pathLength - 1}-step relative`
 }
 
+function pathHasSpouseEdge(data: Data, pathIds: string[]): boolean {
+  const byId = new Map(data.map((d) => [d.id, d]))
+  for (let i = 0; i < pathIds.length - 1; i++) {
+    const a = pathIds[i]
+    const b = pathIds[i + 1]
+    if (a === undefined || b === undefined) continue
+    if ((byId.get(a)?.rels.spouses ?? []).includes(b)) return true
+  }
+  return false
+}
+
+/** Fallback when kinship and monotone generation labels both fail. */
+function describePathConnection(data: Data, pathIds: string[]): string {
+  if (pathHasSpouseEdge(data, pathIds) && generationDeltaAlongPath(data, pathIds) === null) {
+    return 'Relative by marriage'
+  }
+  return describePathFallback(pathIds.length)
+}
+
 /**
  * Net generation change along a path: child +1, parent −1, spouse 0.
- * Used when family-chart kinship misses a label (often when co-parent links
- * are incomplete and the only path walks through spouses).
+ * Returns null if the path both ascends and descends (collateral / by-marriage
+ * routes) — those must not be labeled son/granddaughter.
  */
 export function generationDeltaAlongPath(data: Data, pathIds: string[]): number | null {
   if (pathIds.length < 2) return 0
   const byId = new Map(data.map((d) => [d.id, d]))
   let delta = 0
+  let ups = 0
+  let downs = 0
   for (let i = 0; i < pathIds.length - 1; i++) {
     const fromId = pathIds[i]
     const toId = pathIds[i + 1]
     if (fromId === undefined || toId === undefined) return null
     const from = byId.get(fromId)
     if (!from) return null
-    if ((from.rels.children ?? []).includes(toId)) delta += 1
-    else if ((from.rels.parents ?? []).includes(toId)) delta -= 1
-    else if ((from.rels.spouses ?? []).includes(toId)) {
+    if ((from.rels.children ?? []).includes(toId)) {
+      delta += 1
+      downs += 1
+    } else if ((from.rels.parents ?? []).includes(toId)) {
+      delta -= 1
+      ups += 1
+    } else if ((from.rels.spouses ?? []).includes(toId)) {
       // same generation
     } else {
       return null
     }
   }
+  // e.g. son → DIL → her parent → her brother → his child: not a granddaughter
+  if (ups > 0 && downs > 0) return null
   return delta
 }
 
-/** Kinship-style label from generation delta when the library has no label. */
+/** Kinship-style label from a monotone generation path when the library has no label. */
 export function labelFromPathGenerations(
   data: Data,
   pathIds: string[],
