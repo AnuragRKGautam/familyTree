@@ -143,4 +143,70 @@ describe('mapToFamilyChartData child order', () => {
     const data = mapToFamilyChartData(payload)
     expect(data.find((d) => d.id === 'parent')?.rels.children).toEqual(['young', 'old'])
   })
+
+  it('copies manual order onto co-parent who has no sort_order', () => {
+    const payload: TreePayload = {
+      people: [
+        {
+          id: 'father',
+          first_name: 'Father',
+          last_name: 'Test',
+          gender: 'M',
+          birth_date: '1960-01-01',
+          death_date: null,
+          biography: null,
+          photo_path: null,
+          created_at: '',
+          updated_at: '',
+        },
+        {
+          id: 'mother',
+          first_name: 'Mother',
+          last_name: 'Test',
+          gender: 'F',
+          birth_date: '1962-01-01',
+          death_date: null,
+          biography: null,
+          photo_path: null,
+          created_at: '',
+          updated_at: '',
+        },
+        {
+          id: 'young',
+          first_name: 'Young',
+          last_name: 'Test',
+          gender: 'F',
+          birth_date: '2001-05-01',
+          death_date: null,
+          biography: null,
+          photo_path: null,
+          created_at: '',
+          updated_at: '',
+        },
+        {
+          id: 'old',
+          first_name: 'Old',
+          last_name: 'Test',
+          gender: 'M',
+          birth_date: '1995-02-01',
+          death_date: null,
+          biography: null,
+          photo_path: null,
+          created_at: '',
+          updated_at: '',
+        },
+      ],
+      aliases: [],
+      partnerships: [{ id: 'p1', person_a_id: 'father', person_b_id: 'mother' }],
+      parentChildren: [
+        { id: 'e1', parent_id: 'father', child_id: 'young', sort_order: 0 },
+        { id: 'e2', parent_id: 'father', child_id: 'old', sort_order: 1 },
+        { id: 'e3', parent_id: 'mother', child_id: 'young', sort_order: null },
+        { id: 'e4', parent_id: 'mother', child_id: 'old', sort_order: null },
+      ],
+    }
+    const data = mapToFamilyChartData(payload)
+    expect(data.find((d) => d.id === 'father')?.rels.children).toEqual(['young', 'old'])
+    expect(data.find((d) => d.id === 'mother')?.rels.children).toEqual(['young', 'old'])
+  })
 })

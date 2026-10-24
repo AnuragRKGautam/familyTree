@@ -655,7 +655,9 @@ export function PersonForm() {
                   await withLinkError(async () => {
                     await reorderChildren(personId, orderedIds)
                     setChildIds(orderedIds)
-                    setNotice('Child order saved. Reload the tree to see the new left-to-right order.')
+                    setNotice(
+                      'Child order saved. Open the tree again (or refresh) to see the new left-to-right order.',
+                    )
                   })
                 }}
                 onRemove={(id) =>

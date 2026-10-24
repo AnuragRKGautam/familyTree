@@ -448,21 +448,69 @@ export async function removeParentChild(parentId: string, childId: string): Prom
   if (error) throw toDataAccessError(error, 'Failed to unlink parent/child')
 }
 
-/** Persist left→right child order for a parent (0 = leftmost). */
+/**
+ * Persist left→right child order for a parent (0 = leftmost).
+ * Also mirrors the same order onto any co-parent who shares these children,
+ * so the chart looks the same from either parent.
+ */
 export async function reorderChildren(parentId: string, childIdsInOrder: string[]): Promise<void> {
-  for (let i = 0; i < childIdsInOrder.length; i++) {
-    const childId = childIdsInOrder[i]
-    if (!childId) continue
-    const { error } = await supabase
-      .from('parent_child')
-      .update({ sort_order: i })
-      .eq('parent_id', parentId)
-      .eq('child_id', childId)
-    if (error) {
-      if (error.code === '42501' || error.message.toLowerCase().includes('policy')) {
-        throw new DataAccessError('Permission denied', 'permission_denied')
+  async function writeOrder(forParentId: string) {
+    for (let i = 0; i < childIdsInOrder.length; i++) {
+      const childId = childIdsInOrder[i]
+      if (!childId) continue
+      const { data, error } = await supabase
+        .from('parent_child')
+        .update({ sort_order: i })
+        .eq('parent_id', forParentId)
+        .eq('child_id', childId)
+        .select('id')
+      if (error) {
+        if (error.code === '42501' || error.message.toLowerCase().includes('policy')) {
+          throw new DataAccessError(
+            'Permission denied — ask an admin to apply the parent_child update policy migration.',
+            'permission_denied',
+          )
+        }
+        throw toDataAccessError(error, 'Failed to save child order')
       }
-      throw toDataAccessError(error, 'Failed to save child order')
+      if (!data || data.length === 0) {
+        throw new DataAccessError(
+          'Could not save child order (no row updated). Apply migration 20260324130000_parent_child_update_policy.sql in Supabase, then try again.',
+        )
+      }
+    }
+  }
+
+  await writeOrder(parentId)
+
+  // Mirror the same absolute indices onto every other parent linked to these children.
+  const { data: otherEdges } = await supabase
+    .from('parent_child')
+    .select('parent_id, child_id')
+    .in('child_id', childIdsInOrder)
+    .neq('parent_id', parentId)
+
+  const byOtherParent = new Map<string, string[]>()
+  for (const row of otherEdges ?? []) {
+    const otherId = row.parent_id as string
+    const childId = row.child_id as string
+    const list = byOtherParent.get(otherId) ?? []
+    list.push(childId)
+    byOtherParent.set(otherId, list)
+  }
+
+  for (const [otherId, sharedChildIds] of byOtherParent) {
+    const sharedSet = new Set(sharedChildIds)
+    for (let i = 0; i < childIdsInOrder.length; i++) {
+      const childId = childIdsInOrder[i]
+      if (!childId || !sharedSet.has(childId)) continue
+      const { error } = await supabase
+        .from('parent_child')
+        .update({ sort_order: i })
+        .eq('parent_id', otherId)
+        .eq('child_id', childId)
+      // Co-parent may be outside editor scope; primary parent's order still saved.
+      if (error) continue
     }
   }
 }

@@ -92,6 +92,53 @@ export function mapToFamilyChartData(payload: TreePayload): Data {
     )
   }
 
+  // Partners who share children must use the same left→right order. Otherwise the
+  // chart follows birthday order under the co-parent when only one parent was
+  // reordered (family-chart hangs kids under whichever parent is on the path).
+  for (const edge of payload.partnerships) {
+    const a = byId.get(edge.person_a_id)
+    const b = byId.get(edge.person_b_id)
+    if (!a || !b) continue
+    const shared = a.rels.children.filter((id) => b.rels.children.includes(id))
+    if (shared.length < 2) continue
+
+    const orderedCount = (parentId: string) =>
+      payload.parentChildren.filter(
+        (e) =>
+          e.parent_id === parentId &&
+          shared.includes(e.child_id) &&
+          typeof e.sort_order === 'number',
+      ).length
+
+    const primaryId =
+      orderedCount(a.id) >= orderedCount(b.id) ? a.id : b.id
+    const orderedShared = [...shared].sort((x, y) =>
+      compareChildrenForParent(x, y, primaryId, payload.parentChildren, birthdayById),
+    )
+
+    for (const person of [a, b]) {
+      const exclusive = person.rels.children.filter((id) => !shared.includes(id))
+      const merged: string[] = []
+      let sharedPlaced = false
+      for (const id of person.rels.children) {
+        if (shared.includes(id)) {
+          if (!sharedPlaced) {
+            merged.push(...orderedShared)
+            sharedPlaced = true
+          }
+        } else {
+          merged.push(id)
+        }
+      }
+      if (!sharedPlaced) merged.push(...orderedShared)
+      // Keep exclusive kids that weren't visited (shouldn't happen) at the end.
+      for (const id of exclusive) {
+        if (!merged.includes(id)) merged.push(id)
+      }
+      person.rels.children = merged
+    }
+  }
+
   return [...byId.values()] as Data
 }
 
