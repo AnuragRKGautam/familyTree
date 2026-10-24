@@ -10,6 +10,13 @@ export interface FamilyChartAdapterOptions {
   ancestryDepth?: number
   progenyDepth?: number
   onCardClick?: (personId: string) => void
+  /** Card field rows passed to setCardDisplay. */
+  cardDisplay?: string[][]
+  singleParentEmptyCard?: boolean
+  cardXSpacing?: number
+  cardYSpacing?: number
+  /** When false, skip left/right multi-spouse rebalance (default true). */
+  balanceSpouses?: boolean
 }
 
 export interface FamilyChartAdapter {
@@ -30,6 +37,14 @@ export function createFamilyChartAdapter(options: FamilyChartAdapterOptions): Fa
     ancestryDepth = 4,
     progenyDepth = 4,
     onCardClick,
+    cardDisplay = [
+      ['first name', 'last name'],
+      ['birthday'],
+    ],
+    singleParentEmptyCard = true,
+    cardXSpacing,
+    cardYSpacing,
+    balanceSpouses = true,
   } = options
 
   container.replaceChildren()
@@ -37,10 +52,7 @@ export function createFamilyChartAdapter(options: FamilyChartAdapterOptions): Fa
 
   const chart: Chart = f3.createChart(container, data)
 
-  const card = chart.setCardHtml().setCardDisplay([
-    ['first name', 'last name'],
-    ['birthday'],
-  ])
+  const card = chart.setCardHtml().setCardDisplay(cardDisplay)
 
   if (onCardClick) {
     card.setOnCardClick((_event: MouseEvent, datum: TreeDatum) => {
@@ -50,13 +62,18 @@ export function createFamilyChartAdapter(options: FamilyChartAdapterOptions): Fa
   }
 
   chart.setAncestryDepth(ancestryDepth).setProgenyDepth(progenyDepth)
+  chart.setSingleParentEmptyCard(singleParentEmptyCard, { label: 'Unknown parent' })
+  if (typeof cardXSpacing === 'number') chart.setCardXSpacing(cardXSpacing)
+  if (typeof cardYSpacing === 'number') chart.setCardYSpacing(cardYSpacing)
 
   // Place multiple spouses on both sides of a person (library stacks them on one side).
-  chart.beforeUpdate = () => {
-    const tree = chart.store.getTree() as ChartTree | undefined
-    if (!tree) return
-    const nodeSeparation = chart.store.state.node_separation ?? 250
-    balanceMultipleSpouses(tree, nodeSeparation)
+  if (balanceSpouses) {
+    chart.beforeUpdate = () => {
+      const tree = chart.store.getTree() as ChartTree | undefined
+      if (!tree) return
+      const nodeSeparation = chart.store.state.node_separation ?? 250
+      balanceMultipleSpouses(tree, nodeSeparation)
+    }
   }
 
   let currentData = data

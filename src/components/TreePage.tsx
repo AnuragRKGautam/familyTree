@@ -93,6 +93,7 @@ export function TreePage() {
           )}
         </div>
         <nav className="topbar-nav">
+          <Link to="/relation">Find relation</Link>
           {canEdit && (isAdmin || (accessScopeIds && accessScopeIds.size > 0)) ? (
             <Link to="/people/new">Add person</Link>
           ) : null}

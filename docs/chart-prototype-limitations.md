@@ -26,6 +26,10 @@ Our domain stores `ParentChild.kind = 'biological' | 'adoptive'`. The free core 
 
 Yes — focusing changes the visible neighborhood. The library rebuilds the tree around the **main** person using ancestry/progeny depth (`setAncestryDepth` / `setProgenyDepth`). Relatives outside those depths, and entire **disconnected branches**, are hidden until that branch’s person becomes main (e.g. search → focus on an Ash family member).
 
+## Relation between two people
+
+The app route `/relation` uses documented `chart.calculateKinships` and `chart.getKinshipsDataStash` to label how person B relates to person A and to render a small connecting path chart (free core; not premium).
+
 ## Generation filtering without premium
 
 Partial / depth-only, not full filter UI:

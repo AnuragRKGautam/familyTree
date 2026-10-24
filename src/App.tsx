@@ -8,6 +8,7 @@ import { TreePage } from './components/TreePage'
 import { PersonForm } from './components/PersonForm'
 import { AdminProfiles } from './components/AdminProfiles'
 import { PersonProfilePage } from './components/PersonProfilePage'
+import { RelationFinderPage } from './components/RelationFinderPage'
 import { PrototypePage } from './prototype/PrototypePage'
 import { LimitationsPage } from './prototype/LimitationsPage'
 
@@ -112,6 +113,7 @@ export default function App() {
             <Route path="/tree" element={<TreePage />} />
             <Route path="/tree/:personId" element={<TreePage />} />
             <Route path="/people/:personId" element={<PersonProfilePage />} />
+            <Route path="/relation" element={<RelationFinderPage />} />
           </Route>
 
           <Route element={<AuthedLayout />}>
