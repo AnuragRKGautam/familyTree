@@ -1,0 +1,17 @@
+{
+  "name": "Family Tree",
+  "short_name": "Family Tree",
+  "description": "Browse and edit your family tree",
+  "start_url": "/tree",
+  "display": "standalone",
+  "background_color": "#f5f0e8",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

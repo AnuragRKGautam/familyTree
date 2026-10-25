@@ -64,8 +64,8 @@ export function ChildrenOrderList({
   return (
     <div className="children-order">
       <p className="muted small">
-        Drag to reorder, or use ↑ ↓. Leftmost on this list is leftmost on the chart (oldest first when
-        using birth dates).
+        Use ↑ ↓ to reorder (drag also works on desktop). Leftmost on this list is leftmost on the
+        chart.
       </p>
       <ol className="children-order-list">
         {childIds.map((id, index) => {

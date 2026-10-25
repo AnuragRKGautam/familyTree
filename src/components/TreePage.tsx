@@ -1,24 +1,34 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { loadTreePayload } from '../data/people'
 import { DataAccessError } from '../data/errors'
 import { mapToFamilyChartData } from '../chart/mapToFamilyChartData'
 import type { Data } from 'family-chart'
 import { useAuth } from '../app/useAuth'
-import { FamilyChartView } from './FamilyChartView'
+import { AppTopbar } from './AppTopbar'
+import { FamilyChartView, type FamilyChartViewHandle } from './FamilyChartView'
 import { PersonProfile } from './PersonProfile'
 import { PersonSearch } from './PersonSearch'
 import { StatusMessage } from './StatusMessage'
 
 const SIDEBAR_STORAGE_KEY = 'familytree.sidebarOpen'
+const NARROW_MQ = '(max-width: 900px)'
+
+function isNarrowScreen(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia(NARROW_MQ).matches
+}
 
 function readSidebarOpen(): boolean {
   try {
     const raw = localStorage.getItem(SIDEBAR_STORAGE_KEY)
-    if (raw === null) return true
+    if (raw === null) {
+      // On phones, start with the chart visible.
+      return !isNarrowScreen()
+    }
     return raw !== '0'
   } catch {
-    return true
+    return !isNarrowScreen()
   }
 }
 
@@ -32,6 +42,8 @@ export function TreePage() {
   const [error, setError] = useState<string | null>(null)
   const [denied, setDenied] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(readSidebarOpen)
+  const [layoutKey, setLayoutKey] = useState(0)
+  const chartRef = useRef<FamilyChartViewHandle | null>(null)
 
   useEffect(() => {
     try {
@@ -39,12 +51,27 @@ export function TreePage() {
     } catch {
       /* ignore */
     }
-    // Give the chart layout a beat to widen, then nudge family-chart to reflow.
     const id = window.setTimeout(() => {
-      window.dispatchEvent(new Event('resize'))
-    }, 50)
+      setLayoutKey((k) => k + 1)
+      chartRef.current?.reflow()
+    }, 80)
     return () => window.clearTimeout(id)
   }, [sidebarOpen])
+
+  useEffect(() => {
+    const mq = window.matchMedia(NARROW_MQ)
+    function onChange() {
+      // First visit with no stored preference: keep chart-first on narrow screens.
+      try {
+        if (localStorage.getItem(SIDEBAR_STORAGE_KEY) !== null) return
+      } catch {
+        /* ignore */
+      }
+      setSidebarOpen(!mq.matches)
+    }
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -75,44 +102,42 @@ export function TreePage() {
 
   function selectPerson(id: string) {
     navigate(`/tree/${id}`)
+    if (isNarrowScreen()) setSidebarOpen(true)
   }
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div>
-          <strong>Family Tree</strong>
-          {isLoggedIn && profile ? (
-            <span className="muted">
-              {' '}
+      <AppTopbar
+        subtitle={
+          isLoggedIn && profile ? (
+            <>
               · {profile.email} ({profile.role}
               {!profile.approved ? ', pending approval' : ''})
-            </span>
-          ) : (
-            <span className="muted"> · Public view</span>
-          )}
-        </div>
-        <nav className="topbar-nav">
-          <Link to="/relation">Find relation</Link>
-          {canEdit && (isAdmin || (accessScopeIds && accessScopeIds.size > 0)) ? (
-            <>
-              <Link to="/people/new">Add person</Link>
-              <Link to="/people/add-family">Add family</Link>
             </>
-          ) : null}
-          {isAdmin ? <Link to="/admin/profiles">Users & access</Link> : null}
-          {isLoggedIn ? (
-            <button type="button" className="linkish" onClick={() => void signOut()}>
-              Sign out
-            </button>
           ) : (
-            <>
-              <Link to="/signin">Sign in</Link>
-              <Link to="/signup">Sign up</Link>
-            </>
-          )}
-        </nav>
-      </header>
+            <> · Public view</>
+          )
+        }
+      >
+        <Link to="/relation">Find relation</Link>
+        {canEdit && (isAdmin || (accessScopeIds && accessScopeIds.size > 0)) ? (
+          <>
+            <Link to="/people/new">Add person</Link>
+            <Link to="/people/add-family">Add family</Link>
+          </>
+        ) : null}
+        {isAdmin ? <Link to="/admin/profiles">Users & access</Link> : null}
+        {isLoggedIn ? (
+          <button type="button" className="linkish" onClick={() => void signOut()}>
+            Sign out
+          </button>
+        ) : (
+          <>
+            <Link to="/signin">Sign in</Link>
+            <Link to="/signup">Sign up</Link>
+          </>
+        )}
+      </AppTopbar>
 
       {status === 'unapproved' ? (
         <p className="banner-warn">
@@ -168,6 +193,14 @@ export function TreePage() {
         )}
 
         <section className="chart-pane">
+          {!loading && !denied && !error && chartData.length > 0 ? (
+            <div className="chart-toolbar">
+              <button type="button" onClick={() => chartRef.current?.fitToView()}>
+                Fit to view
+              </button>
+              <span className="muted">Pinch to zoom · drag to pan · long-press a card for details</span>
+            </div>
+          ) : null}
           {loading ? <StatusMessage title="Loading family tree…" /> : null}
           {denied ? (
             <StatusMessage
@@ -192,9 +225,11 @@ export function TreePage() {
           ) : null}
           {!loading && !denied && !error && chartData.length > 0 ? (
             <FamilyChartView
+              ref={chartRef}
               data={chartData}
               mainId={mainId}
               onPersonClick={selectPerson}
+              layoutKey={layoutKey}
             />
           ) : null}
         </section>

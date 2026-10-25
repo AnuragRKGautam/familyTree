@@ -234,54 +234,56 @@ export function AdminProfiles() {
         {pendingInvites.length === 0 ? (
           <p className="muted">No open invites.</p>
         ) : (
-          <table className="profiles-table">
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Access root</th>
-                <th>Created</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {pendingInvites.map((invite) => (
-                <tr key={invite.id}>
-                  <td>{invite.email}</td>
-                  <td>{invite.role}</td>
-                  <td>{personName(invite.root_person_id)}</td>
-                  <td>{new Date(invite.created_at).toLocaleString()}</td>
-                  <td className="invite-actions">
-                    <button
-                      type="button"
-                      className="linkish"
-                      onClick={() => void resendInviteEmail(invite.email)}
-                    >
-                      Resend email
-                    </button>
-                    <a className="linkish" href={inviteMailtoHref(invite.email, signupUrl)}>
-                      Email manually
-                    </a>
-                    <button
-                      type="button"
-                      className="linkish"
-                      onClick={() =>
-                        void deleteInvite(invite.id)
-                          .then(reload)
-                          .catch((err: unknown) =>
-                            setError(
-                              err instanceof DataAccessError ? err.message : 'Delete failed',
-                            ),
-                          )
-                      }
-                    >
-                      Remove
-                    </button>
-                  </td>
+          <div className="table-scroll">
+            <table className="profiles-table">
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Access root</th>
+                  <th>Created</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {pendingInvites.map((invite) => (
+                  <tr key={invite.id}>
+                    <td>{invite.email}</td>
+                    <td>{invite.role}</td>
+                    <td>{personName(invite.root_person_id)}</td>
+                    <td>{new Date(invite.created_at).toLocaleString()}</td>
+                    <td className="invite-actions">
+                      <button
+                        type="button"
+                        className="linkish"
+                        onClick={() => void resendInviteEmail(invite.email)}
+                      >
+                        Resend email
+                      </button>
+                      <a className="linkish" href={inviteMailtoHref(invite.email, signupUrl)}>
+                        Email manually
+                      </a>
+                      <button
+                        type="button"
+                        className="linkish"
+                        onClick={() =>
+                          void deleteInvite(invite.id)
+                            .then(reload)
+                            .catch((err: unknown) =>
+                              setError(
+                                err instanceof DataAccessError ? err.message : 'Delete failed',
+                              ),
+                            )
+                        }
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 
@@ -290,52 +292,55 @@ export function AdminProfiles() {
         {pendingUsers.length === 0 ? (
           <p className="muted">No pending users.</p>
         ) : (
-          <table className="profiles-table">
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Access root</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {pendingUsers.map((p) => (
-                <tr key={p.id}>
-                  <td>{p.email}</td>
-                  <td>
-                    <select
-                      value={p.role}
-                      onChange={(e) => void patch(p.id, { role: e.target.value as UserRole })}
-                    >
-                      <option value="viewer">viewer</option>
-                      <option value="editor">editor</option>
-                      <option value="admin">admin</option>
-                    </select>
-                  </td>
-                  <td className="root-cell">
-                    <PersonSearchSelect
-                      people={people}
-                      value={rootByProfile.get(p.id) ?? ''}
-                      onChange={(id) => void changeRoot(p.id, id || null)}
-                      placeholder="Set family root…"
-                      spouseNamesByPersonId={spouseNamesByPersonId}
-                    />
-                  </td>
-                  <td>
-                    <button type="button" onClick={() => void patch(p.id, { approved: true })}>
-                      Approve
-                    </button>
-                  </td>
+          <div className="table-scroll">
+            <table className="profiles-table">
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Access root</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {pendingUsers.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.email}</td>
+                    <td>
+                      <select
+                        value={p.role}
+                        onChange={(e) => void patch(p.id, { role: e.target.value as UserRole })}
+                      >
+                        <option value="viewer">viewer</option>
+                        <option value="editor">editor</option>
+                        <option value="admin">admin</option>
+                      </select>
+                    </td>
+                    <td className="root-cell">
+                      <PersonSearchSelect
+                        people={people}
+                        value={rootByProfile.get(p.id) ?? ''}
+                        onChange={(id) => void changeRoot(p.id, id || null)}
+                        placeholder="Set family root…"
+                        spouseNamesByPersonId={spouseNamesByPersonId}
+                      />
+                    </td>
+                    <td>
+                      <button type="button" onClick={() => void patch(p.id, { approved: true })}>
+                        Approve
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 
       <section className="access-section">
         <h2>All users</h2>
+        <div className="table-scroll">
         <table className="profiles-table">
           <thead>
             <tr>
@@ -383,6 +388,7 @@ export function AdminProfiles() {
             ))}
           </tbody>
         </table>
+        </div>
       </section>
     </main>
   )

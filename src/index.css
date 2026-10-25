@@ -29,10 +29,12 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 #root {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 a {
@@ -140,6 +142,7 @@ button[type='submit'] {
 
 .app-shell {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   grid-template-rows: auto 1fr;
 }
@@ -149,16 +152,44 @@ button[type='submit'] {
   justify-content: space-between;
   gap: 1rem;
   align-items: center;
+  flex-wrap: wrap;
   padding: 0.9rem 1.25rem;
+  padding-top: calc(0.9rem + env(safe-area-inset-top, 0px));
+  padding-left: calc(1.25rem + env(safe-area-inset-left, 0px));
+  padding-right: calc(1.25rem + env(safe-area-inset-right, 0px));
   border-bottom: 1px solid var(--line);
   background: rgba(255, 253, 248, 0.9);
   backdrop-filter: blur(8px);
+}
+
+.topbar-brand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.topbar-title {
+  font-weight: 700;
+  text-decoration: none;
+  color: inherit;
+}
+
+.topbar-subtitle {
+  font-size: 0.9rem;
+}
+
+.topbar-menu-toggle {
+  display: none;
 }
 
 .topbar-nav {
   display: flex;
   gap: 1rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .workspace {
@@ -224,25 +255,52 @@ button[type='submit'] {
 
 .chart-pane {
   min-height: 70vh;
+  min-height: 70dvh;
   position: relative;
   padding: 0.5rem;
+  padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 0.5rem;
+}
+
+.chart-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.chart-toolbar .muted {
+  font-size: 0.85rem;
 }
 
 .family-chart-host,
 .family-chart-host.f3 {
   width: 100%;
   height: calc(100vh - 5rem);
+  height: calc(100dvh - 5rem);
   min-height: 480px;
   background: rgba(255, 253, 248, 0.55);
   border-radius: 12px;
   overflow: hidden;
+  touch-action: none;
+  position: relative;
 }
 
 .family-chart-host--relation,
 .family-chart-host--relation.f3 {
   height: min(70vh, 640px);
+  height: min(70dvh, 640px);
   min-height: 360px;
   border: 1px solid var(--line);
+  touch-action: none;
+}
+
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .relation-page .relation-picker {
@@ -731,9 +789,15 @@ button.button-link:hover {
     grid-template-columns: auto 1fr;
   }
 
+  .workspace:not(.workspace--sidebar-collapsed) {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(40vh, 50vh) 1fr;
+  }
+
   .sidebar {
     border-right: 0;
     border-bottom: 1px solid var(--line);
+    max-height: 50vh;
   }
 
   .sidebar-rail {
@@ -743,12 +807,52 @@ button.button-link:hover {
 
   .family-chart-host,
   .family-chart-host.f3 {
-    height: 60vh;
+    height: calc(100dvh - 9rem);
+    min-height: 320px;
   }
 
-  .topbar {
+  .topbar-menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.5rem;
+    padding: 0.45rem 0.85rem;
+  }
+
+  .topbar-nav {
+    display: none;
+    width: 100%;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
+    gap: 0;
+    border-top: 1px solid var(--line);
+    padding-top: 0.5rem;
+  }
+
+  .topbar-nav.topbar-nav--open {
+    display: flex;
+  }
+
+  .topbar-nav a,
+  .topbar-nav button.linkish {
+    padding: 0.75rem 0.35rem;
+    min-height: 2.75rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .topbar-nav a:last-child,
+  .topbar-nav button.linkish:last-child {
+    border-bottom: 0;
+  }
+
+  .children-order-actions button {
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+    padding: 0.45rem 0.65rem;
+  }
+
+  .children-order-handle {
+    display: none;
   }
 }
 

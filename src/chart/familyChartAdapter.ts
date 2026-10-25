@@ -37,10 +37,19 @@ export interface FamilyChartAdapterOptions {
 export interface FamilyChartAdapter {
   focusPerson: (personId: string) => void
   updateData: (data: Data, mainId?: string) => void
+  fitToView: () => void
+  reflow: () => void
   destroy: () => void
 }
 
 type TreeDim = { width: number; height: number; x_off: number; y_off: number }
+
+const LONG_PRESS_MS = 450
+const MOVE_CANCEL_PX = 12
+
+function finePointerHover(): boolean {
+  return window.matchMedia('(hover: hover) and (pointer: fine)').matches
+}
 
 function getZoomListener(svg: SVGElement): Element & { __zoomObj?: d3.ZoomBehavior<Element, unknown> } {
   const asAny = svg as SVGElement & { __zoomObj?: d3.ZoomBehavior<Element, unknown> }
@@ -108,13 +117,25 @@ export function createFamilyChartAdapter(options: FamilyChartAdapterOptions): Fa
     container.appendChild(tooltipEl)
   }
 
+  let suppressNextClick = false
+  const cleanups: Array<() => void> = []
+
   function hideTooltip() {
     if (!tooltipEl) return
     tooltipEl.hidden = true
     tooltipEl.textContent = ''
   }
 
-  function showTooltip(event: Event, datum: TreeDatum) {
+  function positionTooltip(clientX: number, clientY: number) {
+    if (!tooltipEl) return
+    const hostRect = container.getBoundingClientRect()
+    const x = clientX - hostRect.left + 12
+    const y = clientY - hostRect.top + 12
+    tooltipEl.style.left = `${Math.min(Math.max(8, x), Math.max(8, hostRect.width - 220))}px`
+    tooltipEl.style.top = `${Math.min(Math.max(8, y), Math.max(8, hostRect.height - 40))}px`
+  }
+
+  function showTooltipAt(clientX: number, clientY: number, datum: TreeDatum) {
     if (!tooltipEl) return
     if (datum.data.to_add || datum.data._new_rel_data) {
       hideTooltip()
@@ -131,13 +152,74 @@ export function createFamilyChartAdapter(options: FamilyChartAdapterOptions): Fa
     }
     tooltipEl.hidden = false
     tooltipEl.textContent = text
-    const mouse = event as MouseEvent
-    const hostRect = container.getBoundingClientRect()
-    const x = mouse.clientX - hostRect.left + 12
-    const y = mouse.clientY - hostRect.top + 12
-    tooltipEl.style.left = `${Math.min(x, hostRect.width - 220)}px`
-    tooltipEl.style.top = `${Math.min(y, hostRect.height - 40)}px`
+    positionTooltip(clientX, clientY)
   }
+
+  function showTooltip(event: Event, datum: TreeDatum) {
+    const mouse = event as MouseEvent
+    showTooltipAt(mouse.clientX, mouse.clientY, datum)
+  }
+
+  function bindTouchTooltip(cardEl: HTMLElement, datum: TreeDatum) {
+    if (cardEl.dataset.touchTooltipBound === '1') return
+    cardEl.dataset.touchTooltipBound = '1'
+
+    let pressTimer: number | null = null
+    let startX = 0
+    let startY = 0
+
+    function clearPress() {
+      if (pressTimer != null) {
+        window.clearTimeout(pressTimer)
+        pressTimer = null
+      }
+    }
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse') return
+      clearPress()
+      startX = e.clientX
+      startY = e.clientY
+      pressTimer = window.setTimeout(() => {
+        pressTimer = null
+        suppressNextClick = true
+        showTooltipAt(e.clientX, e.clientY, datum)
+      }, LONG_PRESS_MS)
+    }
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (pressTimer == null) return
+      if (
+        Math.abs(e.clientX - startX) > MOVE_CANCEL_PX ||
+        Math.abs(e.clientY - startY) > MOVE_CANCEL_PX
+      ) {
+        clearPress()
+      }
+    }
+
+    const onPointerEnd = () => clearPress()
+
+    cardEl.addEventListener('pointerdown', onPointerDown)
+    cardEl.addEventListener('pointermove', onPointerMove)
+    cardEl.addEventListener('pointerup', onPointerEnd)
+    cardEl.addEventListener('pointercancel', onPointerEnd)
+    cleanups.push(() => {
+      clearPress()
+      cardEl.removeEventListener('pointerdown', onPointerDown)
+      cardEl.removeEventListener('pointermove', onPointerMove)
+      cardEl.removeEventListener('pointerup', onPointerEnd)
+      cardEl.removeEventListener('pointercancel', onPointerEnd)
+    })
+  }
+
+  const onOutsidePointer = (e: PointerEvent) => {
+    if (!tooltipEl || tooltipEl.hidden) return
+    const target = e.target as Element | null
+    if (target?.closest?.('.card') || target?.closest?.('.f3-person-tooltip')) return
+    hideTooltip()
+  }
+  container.addEventListener('pointerdown', onOutsidePointer)
+  cleanups.push(() => container.removeEventListener('pointerdown', onOutsidePointer))
 
   card.setOnCardUpdate(function (this: HTMLElement, datum: TreeDatum) {
     const el = this.querySelector('.card') as HTMLElement | null
@@ -162,17 +244,25 @@ export function createFamilyChartAdapter(options: FamilyChartAdapterOptions): Fa
       el.removeAttribute('data-deceased')
       el.querySelector('.deceased-mark')?.remove()
     }
+    bindTouchTooltip(el, datum)
   })
 
   card.onCardMouseenter = (e: Event, d: TreeDatum) => {
+    if (!finePointerHover()) return
     showTooltip(e, d)
   }
   card.onCardMouseleave = () => {
+    if (!finePointerHover()) return
     hideTooltip()
   }
 
   if (onCardClick) {
     card.setOnCardClick((_event: MouseEvent, datum: TreeDatum) => {
+      if (suppressNextClick) {
+        suppressNextClick = false
+        return
+      }
+      hideTooltip()
       const id = datum.data.id
       if (typeof id === 'string') onCardClick(id)
     })
@@ -226,8 +316,16 @@ export function createFamilyChartAdapter(options: FamilyChartAdapterOptions): Fa
   }
 
   const viewPosition = treePosition === 'fit_top' ? 'fit' : treePosition
+
+  function runTreeUpdate(position: TreePosition | 'fit' | 'main_to_middle', initial = false) {
+    chart.updateTree({ initial, tree_position: position })
+    if (treePosition === 'fit_top') {
+      requestAnimationFrame(() => applyFitTop(chart))
+    }
+  }
+
   try {
-    chart.updateTree({ initial: true, tree_position: viewPosition })
+    runTreeUpdate(viewPosition, true)
   } catch (err) {
     container.replaceChildren()
     const msg = document.createElement('p')
@@ -239,20 +337,12 @@ export function createFamilyChartAdapter(options: FamilyChartAdapterOptions): Fa
     container.appendChild(msg)
     throw err
   }
-  if (treePosition === 'fit_top') {
-    // initial:true uses fit centering; afterUpdate then pins to top — run once more
-    // in case afterUpdate ran before layout settled.
-    requestAnimationFrame(() => applyFitTop(chart))
-  }
 
   return {
     focusPerson(personId: string) {
       if (!currentData.some((d) => d.id === personId)) return
       chart.updateMainId(personId)
-      chart.updateTree({ tree_position: viewPosition })
-      if (treePosition === 'fit_top') {
-        requestAnimationFrame(() => applyFitTop(chart))
-      }
+      runTreeUpdate(viewPosition)
     },
     updateData(nextData: Data, nextMainId?: string) {
       currentData = nextData
@@ -263,12 +353,24 @@ export function createFamilyChartAdapter(options: FamilyChartAdapterOptions): Fa
           ? nextMainId
           : nextData[0]?.id
       if (focus) chart.updateMainId(focus)
-      chart.updateTree({ tree_position: viewPosition })
-      if (treePosition === 'fit_top') {
-        requestAnimationFrame(() => applyFitTop(chart))
+      runTreeUpdate(viewPosition)
+    },
+    fitToView() {
+      runTreeUpdate('fit')
+    },
+    reflow() {
+      runTreeUpdate(viewPosition === 'main_to_middle' ? 'fit' : viewPosition)
+      if (viewPosition === 'main_to_middle' && initialMain) {
+        // After fitting to the new size, re-center on the focused person.
+        requestAnimationFrame(() => {
+          chart.updateTree({ tree_position: 'main_to_middle' })
+        })
       }
     },
     destroy() {
+      for (const cleanup of cleanups) cleanup()
+      cleanups.length = 0
+      hideTooltip()
       container.replaceChildren()
     },
   }
