@@ -315,9 +315,11 @@ export function createFamilyChartAdapter(options: FamilyChartAdapterOptions): Fa
     chart.updateMainId(initialMain)
   }
 
-  const viewPosition = treePosition === 'fit_top' ? 'fit' : treePosition
+  type LibraryTreePosition = 'fit' | 'main_to_middle'
+  const viewPosition: LibraryTreePosition =
+    treePosition === 'fit_top' ? 'fit' : treePosition
 
-  function runTreeUpdate(position: TreePosition | 'fit' | 'main_to_middle', initial = false) {
+  function runTreeUpdate(position: LibraryTreePosition, initial = false) {
     chart.updateTree({ initial, tree_position: position })
     if (treePosition === 'fit_top') {
       requestAnimationFrame(() => applyFitTop(chart))
